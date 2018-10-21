@@ -5,7 +5,8 @@ __pycache__/
 
 # C extensions
 *.so
-
+script_generation_tools/*
+cluster_experiment_scripts/*
 # Distribution / packaging
 .Python
 build/
@@ -34,6 +35,9 @@ MANIFEST
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
+
+#codebase-specific
+datasets/*
 
 # Unit test / coverage reports
 htmlcov/

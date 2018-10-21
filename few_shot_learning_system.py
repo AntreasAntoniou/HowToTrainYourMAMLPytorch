@@ -77,7 +77,7 @@ class MAMLFewShotClassifier(nn.Module):
                                                               eta_min=self.args.min_learning_rate)
 
     def get_per_step_loss_importance_vector(self):
-        loss_weights = np.ones(shape=(self.args.number_of_training_steps_per_iter + 1)) * (
+        loss_weights = np.ones(shape=(self.args.number_of_training_steps_per_iter)) * (
                     1.0 / self.args.number_of_training_steps_per_iter)
         decay_rate = 1.0 / self.args.number_of_training_steps_per_iter / 15.
         min_value_for_non_final_losses = 0.03 / self.args.number_of_training_steps_per_iter

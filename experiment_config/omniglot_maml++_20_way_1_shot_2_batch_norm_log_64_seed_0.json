@@ -12,6 +12,8 @@
   "experiment_name":"MAML++_Omniglot_20_way_1_shot_2_filter_multi_step_loss_with_max_pooling_seed_0",
   "train_seed": 0, "val_seed": 0,
   "train_val_test_split": [0.70918052988, 0.03080714725, 0.2606284658],
+  "indexes_of_folders_indicating_class": [-3, -2],
+  "sets_are_pre_split": false,
 
   "total_epochs": 150,
   "total_iter_per_epoch":500, "continue_from_epoch": -2,
