@@ -1,3 +1,4 @@
+import json
 import os
 import numpy as np
 from PIL import Image
@@ -190,9 +191,9 @@ class FewShotLearningDatasetParallel(Dataset):
                  label_to_index: dictionary containing human understandable string mapped to numerical indexes
         """
         dataset_dir = os.environ['DATASET_DIR']
-        data_path_file = "{}/{}.pkl".format(dataset_dir, self.dataset_name)
-        self.index_to_label_name_dict_file = "{}/map_to_label_name_{}.pkl".format(dataset_dir, self.dataset_name)
-        self.label_name_to_map_dict_file = "{}/label_name_to_map_{}.pkl".format(dataset_dir, self.dataset_name)
+        data_path_file = "{}/{}.json".format(dataset_dir, self.dataset_name)
+        self.index_to_label_name_dict_file = "{}/map_to_label_name_{}.json".format(dataset_dir, self.dataset_name)
+        self.label_name_to_map_dict_file = "{}/label_name_to_map_{}.json".format(dataset_dir, self.dataset_name)
 
         if not os.path.exists(data_path_file):
             self.reset_stored_filepaths = True
@@ -200,38 +201,48 @@ class FewShotLearningDatasetParallel(Dataset):
         if self.reset_stored_filepaths == True:
             if os.path.exists(data_path_file):
                 os.remove(data_path_file)
-                self.reset_stored_filepaths = False
+            self.reset_stored_filepaths = False
 
         try:
-            data_image_paths = self.load_dict(data_path_file)
-            label_to_index = self.load_dict(name=self.label_name_to_map_dict_file)
-            index_to_label_name_dict_file = self.load_dict(name=self.index_to_label_name_dict_file)
+            data_image_paths = self.load_from_json(filename=data_path_file)
+            label_to_index = self.load_from_json(filename=self.label_name_to_map_dict_file)
+            index_to_label_name_dict_file = self.load_from_json(filename=self.index_to_label_name_dict_file)
             return data_image_paths, index_to_label_name_dict_file, label_to_index
         except:
             print("Mapped data paths can't be found, remapping paths..")
             data_image_paths, code_to_label_name, label_name_to_code = self.get_data_paths()
-            self.save_dict(data_image_paths, name=data_path_file)
-            self.save_dict(code_to_label_name, name=self.index_to_label_name_dict_file)
-            self.save_dict(label_name_to_code, name=self.label_name_to_map_dict_file)
+            self.save_to_json(dict_to_store=data_image_paths, filename=data_path_file)
+            self.save_to_json(dict_to_store=code_to_label_name, filename=self.index_to_label_name_dict_file)
+            self.save_to_json(dict_to_store=label_name_to_code, filename=self.label_name_to_map_dict_file)
             return self.load_datapaths()
 
-    def save_dict(self, obj, name):
-        """
-        Saves a dictionary as a pickle object
-        :param obj: A dict object to be saved
-        :param name: String containing the target pickle-object name
-        """
-        with open(name, 'wb') as f:
-            pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
+    # def save_dict(self, obj, name):
+    #     """
+    #     Saves a dictionary as a pickle object
+    #     :param obj: A dict object to be saved
+    #     :param name: String containing the target pickle-object name
+    #     """
+    #     with open(name, 'wb') as f:
+    #         pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
+    #
+    # def load_dict(self, name):
+    #     """
+    #     Load a pickle object and cast it as a dict object
+    #     :param name:
+    #     :return:
+    #     """
+    #     with open(name, 'rb') as f:
+    #         return pickle.load(f)
 
-    def load_dict(self, name):
-        """
-        Load a pickle object and cast it as a dict object
-        :param name:
-        :return:
-        """
-        with open(name, 'rb') as f:
-            return pickle.load(f)
+    def save_to_json(self, filename, dict_to_store):
+        with open(os.path.abspath(filename), 'w') as f:
+            json.dump(dict_to_store, fp=f)
+
+    def load_from_json(self, filename):
+        with open(filename, mode="r") as f:
+            load_dict = json.load(fp=f)
+
+        return load_dict
 
     def load_test_image(self, filepath):
         """
@@ -294,7 +305,7 @@ class FewShotLearningDatasetParallel(Dataset):
         Generates a set containing all class numerical indexes
         :return: A set containing all class numerical indexes
         """
-        index_to_label_name_dict_file = self.load_dict(name=self.index_to_label_name_dict_file)
+        index_to_label_name_dict_file = self.load_from_json(filename=self.index_to_label_name_dict_file)
         return set(list(index_to_label_name_dict_file.keys()))
 
     def get_index_from_label(self, label):
@@ -303,11 +314,11 @@ class FewShotLearningDatasetParallel(Dataset):
         :param label: A string of a human understandable class contained in the dataset
         :return: An int containing the numerical index of the given class-string
         """
-        label_to_index = self.load_dict(name=self.label_name_to_map_dict_file)
+        label_to_index = self.load_from_json(filename=self.label_name_to_map_dict_file)
         return label_to_index[label]
 
     def get_label_from_index(self, index):
-        index_to_label_name = self.load_dict(name=self.index_to_label_name_dict_file)
+        index_to_label_name = self.load_from_json(filename=self.index_to_label_name_dict_file)
         return index_to_label_name[index]
 
     def get_label_from_path(self, filepath):
