@@ -30,6 +30,7 @@ class ExperimentBuilder(object):
                 self.model.load_model(model_save_dir=self.saved_models_filepath, model_name="train_model",
                                  model_idx=self.args.continue_from_epoch)
             self.start_epoch = int(self.state['current_iter'] / self.args.total_iter_per_epoch)
+            self.data.continue_from_iter(current_iter=self.state['current_iter'])
         elif self.args.continue_from_epoch == -1:
             self.create_summary_csv = True
         elif self.args.continue_from_epoch == -2:
@@ -40,8 +41,7 @@ class ExperimentBuilder(object):
                     self.model.load_model(model_save_dir=self.saved_models_filepath, model_name="train_model",
                                      model_idx='latest')
                 self.start_epoch = int(self.state['current_iter'] / self.args.total_iter_per_epoch)
-                self.args.train_seed = self.args.train_seed + self.state['current_iter']
-
+                self.data.continue_from_iter(current_iter=self.state['current_iter'])
             else:
                 self.args.continue_from_epoch = -1
                 self.create_summary_csv = True
@@ -159,90 +159,84 @@ class ExperimentBuilder(object):
                                                       list(epoch_summary_losses.values()))
         return start_time
 
-
-
     def run_experiment(self):
-        with tqdm.tqdm(initial=self.epoch, total=int(self.args.total_epochs)) as pbar_epoch:
+
+        with tqdm.tqdm(initial=self.state['current_iter'],
+                       total=int(self.args.total_iter_per_epoch * self.args.total_epochs)) as pbar_train:
+
             while self.state['current_iter'] < (self.args.total_epochs * self.args.total_iter_per_epoch):
                 better_val_model = False
-                with tqdm.tqdm(initial=self.state['current_iter'], total=int(self.args.total_iter_per_epoch * self.args.total_epochs)) as pbar_train:
 
-                    for sample_idx, train_sample in enumerate(
-                            self.data.get_train_batches(total_batches=int(self.args.total_iter_per_epoch *
-                                                                     self.args.total_epochs),
-                                                   augment_images=self.augment_flag)):
+                for train_sample_idx, train_sample in enumerate(self.data.get_train_batches(total_batches=int(self.args.total_iter_per_epoch *
+                                                                                  self.args.total_epochs) - self.state['current_iter'], augment_images=self.augment_flag)):
+                    #print(self.state['current_iter'], (self.args.total_epochs * self.args.total_iter_per_epoch))
+                    total_losses, train_losses, self.state['current_iter'] = self.train_iteration(train_sample=train_sample,
+                                                                               total_losses=self.total_losses,
+                                                                               epoch_idx=(self.state['current_iter'] /
+                                                                                          self.args.total_iter_per_epoch),
+                                                                               pbar_train=pbar_train,
+                                                                               current_iter=self.state['current_iter'],
+                                                                               sample_idx=self.state['current_iter'])
 
-                        total_losses, train_losses, self.state['current_iter'] = self.train_iteration(train_sample=train_sample,
-                                                                                   total_losses=self.total_losses,
-                                                                                   epoch_idx=(self.state['current_iter'] /
-                                                                                              self.args.total_iter_per_epoch),
-                                                                                   pbar_train=pbar_train,
-                                                                                   current_iter=self.state['current_iter'],
-                                                                                   sample_idx=sample_idx)
+                    if self.state['current_iter'] % self.args.total_iter_per_epoch == 0:
 
-                        if self.state['current_iter'] % self.args.total_iter_per_epoch == 0:
+                        total_losses = dict()
+                        val_losses = dict()
+                        with tqdm.tqdm(total=self.args.total_iter_per_epoch) as pbar_val:
+                            for _, val_sample in enumerate(
+                                    self.data.get_val_batches(total_batches=int(self.args.total_iter_per_epoch),
+                                                         augment_images=False)):
+                                val_losses, total_losses = self.evaluation_iteration(val_sample=val_sample,
+                                                                                total_losses=total_losses,
+                                                                                pbar_val=pbar_val)
 
+                            if val_losses["val_accuracy_mean"] > self.state['best_val_acc']:
+                                print("Best validation accuracy", val_losses["val_accuracy_mean"])
+                                self.state['best_val_acc'] = val_losses["val_accuracy_mean"]
+                                self.state['best_val_iter'] = self.state['current_iter']
+                                self.state['best_epoch'] = int(self.state['best_val_iter'] / self.args.total_iter_per_epoch)
+                                better_val_model = True
+
+                        self.epoch += 1
+                        self.state = self.merge_two_dicts(first_dict=self.merge_two_dicts(first_dict=self.state,
+                                                                                          second_dict=train_losses),
+                                                second_dict=val_losses)
+                        self.save_models(model=self.model, epoch=self.epoch, state=self.state)
+
+                        self.start_time = self.pack_and_save_metrics(start_time=self.start_time,
+                                                                     create_summary_csv=self.create_summary_csv,
+                                              train_losses=train_losses, val_losses=val_losses)
+
+                        self.total_losses = dict()
+
+                        self.epochs_done_in_this_run += 1
+
+                        if self.epoch % 1 == 0 and better_val_model:
                             total_losses = dict()
-                            val_losses = dict()
-                            with tqdm.tqdm(total=self.args.total_iter_per_epoch) as pbar_val:
-                                for _, val_sample in enumerate(
-                                        self.data.get_val_batches(total_batches=int(self.args.total_iter_per_epoch),
-                                                             augment_images=False)):
-                                    val_losses, total_losses = self.evaluation_iteration(val_sample=val_sample,
-                                                                                    total_losses=total_losses,
-                                                                                    pbar_val=pbar_val)
+                            test_losses = dict()
+                            with tqdm.tqdm(total=self.args.total_iter_per_epoch) as pbar_test:
+                                for _, test_sample in enumerate(
+                                        self.data.get_test_batches(total_batches=int(self.args.total_iter_per_epoch),
+                                                              augment_images=False)):
+                                    test_losses, total_losses = self.evaluation_iteration(val_sample=test_sample,
+                                                                                     total_losses=total_losses,
+                                                                                     pbar_val=pbar_test)
 
-                                if val_losses["val_accuracy_mean"] > self.state['best_val_acc']:
-                                    print("Best validation accuracy", val_losses["val_accuracy_mean"])
-                                    self.state['best_val_acc'] = val_losses["val_accuracy_mean"]
-                                    self.state['best_val_iter'] = self.state['current_iter']
-                                    self.state['best_epoch'] = int(self.state['best_val_iter'] / self.args.total_iter_per_epoch)
-                                    better_val_model = True
+                            best_test_acc = test_losses["val_accuracy_mean"]
 
-                            self.epoch += 1
-                            self.state = self.merge_two_dicts(first_dict=self.merge_two_dicts(first_dict=self.state, second_dict=train_losses),
-                                                    second_dict=val_losses)
-                            self.save_models(model=self.model, epoch=self.epoch, state=self.state)
+                            epoch_summary_string = self.build_loss_summary_string(test_losses)
 
-                            self.start_time = self.pack_and_save_metrics(start_time=self.start_time,
-                                                                         create_summary_csv=self.create_summary_csv,
-                                                  train_losses=train_losses, val_losses=val_losses)
+                            summary_statistics_filepath = save_statistics(self.logs_filepath,
+                                                                          list(test_losses.keys()),
+                                                                          create=True, filename="test_summary.csv")
+                            summary_statistics_filepath = save_statistics(self.logs_filepath,
+                                                                          list(test_losses.values()),
+                                                                          create=False, filename="test_summary.csv")
 
-                            self.total_losses = dict()
+                            print("Best validation accuracy", self.state['best_val_acc'], self.state['best_val_iter'])
+                            print("Testing accuracy", best_test_acc)
 
-                            self.epochs_done_in_this_run += 1
-
-                            if self.epoch % 1 == 0 and better_val_model:
-                                self.state = \
-                                    self.model.load_model(model_save_dir=self.saved_models_filepath, model_name="train_model",
-                                                     model_idx=self.state['best_epoch'])
-                                total_losses = dict()
-                                test_losses = dict()
-                                with tqdm.tqdm(total=self.args.total_iter_per_epoch) as pbar_test:
-                                    for _, test_sample in enumerate(
-                                            self.data.get_test_batches(total_batches=int(self.args.total_iter_per_epoch),
-                                                                  augment_images=False)):
-                                        test_losses, total_losses = self.evaluation_iteration(val_sample=test_sample,
-                                                                                         total_losses=total_losses,
-                                                                                         pbar_val=pbar_test)
-
-                                best_test_acc = test_losses["val_accuracy_mean"]
-
-                                epoch_summary_string = self.build_loss_summary_string(test_losses)
-
-                                summary_statistics_filepath = save_statistics(self.logs_filepath,
-                                                                              list(test_losses.keys()),
-                                                                              create=True, filename="test_summary.csv")
-                                summary_statistics_filepath = save_statistics(self.logs_filepath,
-                                                                              list(test_losses.values()),
-                                                                              create=False, filename="test_summary.csv")
-
-                                print("Best validation accuracy", self.state['best_val_acc'], self.state['best_val_iter'])
-                                print("Testing accuracy", best_test_acc)
-
-                            if self.epochs_done_in_this_run >= self.total_epochs_before_pause:
-                                print("train_seed {}, val_seed: {}, at pause time".format(self.data.dataset.seed["train"],
-                                                                                          self.data.dataset.seed["val"]))
-                                sys.exit()
-
-                            pbar_epoch.update(1)
+                        if self.epochs_done_in_this_run >= self.total_epochs_before_pause:
+                            print("train_seed {}, val_seed: {}, at pause time".format(self.data.dataset.seed["train"],
+                                                                                      self.data.dataset.seed["val"]))
+                            sys.exit()
