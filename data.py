@@ -147,6 +147,7 @@ class FewShotLearningDatasetParallel(Dataset):
                                           for key in self.datasets[name]]) for name in self.datasets.keys()}
 
         print("data", self.data_length)
+        self.observed_seed_set = None
 
     def load_dataset(self):
         """
@@ -392,6 +393,9 @@ class FewShotLearningDatasetParallel(Dataset):
         :return: A data batch
         """
         rng = np.random.RandomState(seed)
+        # if dataset_name == 'train':
+        #
+        #     print("<<<<<<<<<<<<<<<<<<<<<<<<<<<seed>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>", seed)
         # print(self.num_classes_per_set, len(list(self.dataset_size_dict[dataset_name].keys())))
         selected_classes = rng.choice(list(self.dataset_size_dict[dataset_name].keys()),
                                       size=self.num_classes_per_set, replace=False)
@@ -444,10 +448,10 @@ class FewShotLearningDatasetParallel(Dataset):
     def set_augmentation(self, augment_images):
         self.augment_images = augment_images
 
-    def switch_set(self, set_name, seed=100):
+    def switch_set(self, set_name, current_iter=100):
         self.current_set_name = set_name
         if set_name == "train":
-            self.update_seed(dataset_name=set_name, seed=seed)
+            self.update_seed(dataset_name=set_name, seed=self.init_seed[set_name] + current_iter)
 
     def update_seed(self, dataset_name, seed=100):
         self.seed[dataset_name] = seed
@@ -466,7 +470,6 @@ class FewShotLearningDatasetParallel(Dataset):
 
 class MetaLearningSystemDataLoader(object):
     def __init__(self, args):
-
         self.num_of_gpus = args.num_of_gpus
         self.batch_size = args.batch_size
         self.samples_per_iter = args.samples_per_iter
@@ -476,21 +479,23 @@ class MetaLearningSystemDataLoader(object):
         self.batches_per_iter = args.samples_per_iter
         self.full_data_length = self.dataset.data_length
 
-    def get_dataloader(self, shuffle=False):
+    def get_dataloader(self):
         return DataLoader(self.dataset, batch_size=(self.num_of_gpus * self.batch_size * self.samples_per_iter),
-                          shuffle=shuffle, num_workers=self.num_workers, drop_last=True)
+                          shuffle=False, num_workers=self.num_workers, drop_last=True)
 
-    def get_train_batches(self, total_batches=-1, augment_images=False, random_labels=False):
+    def continue_from_iter(self, current_iter):
+        self.total_train_iters_produced += (current_iter * (self.num_of_gpus * self.batch_size * self.samples_per_iter))
+
+    def get_train_batches(self, total_batches=-1, augment_images=False):
 
         if total_batches == -1:
             self.dataset.data_length = self.full_data_length
         else:
             self.dataset.data_length["train"] = total_batches * self.dataset.batch_size
-        self.dataset.switch_set(set_name="train",
-                                seed=self.dataset.seed["train"] + self.total_train_iters_produced)
+        self.dataset.switch_set(set_name="train", current_iter=self.total_train_iters_produced)
         self.dataset.set_augmentation(augment_images=augment_images)
-        self.total_train_iters_produced += self.dataset.data_length["train"]
-        for sample_id, sample_batched in enumerate(self.get_dataloader(shuffle=True)):
+        self.total_train_iters_produced += (self.num_of_gpus * self.batch_size * self.samples_per_iter)
+        for sample_id, sample_batched in enumerate(self.get_dataloader()):
             preprocess_sample = self.sample_iter_data(sample=sample_batched, num_gpus=self.dataset.num_of_gpus,
                                                       samples_per_iter=self.batches_per_iter,
                                                       batch_size=self.dataset.batch_size)
@@ -503,7 +508,7 @@ class MetaLearningSystemDataLoader(object):
             self.dataset.data_length['val'] = total_batches * self.dataset.batch_size
         self.dataset.switch_set(set_name="val")
         self.dataset.set_augmentation(augment_images=augment_images)
-        for sample_id, sample_batched in enumerate(self.get_dataloader(shuffle=False)):
+        for sample_id, sample_batched in enumerate(self.get_dataloader()):
             preprocess_sample = self.sample_iter_data(sample=sample_batched, num_gpus=self.dataset.num_of_gpus,
                                                       samples_per_iter=self.batches_per_iter,
                                                       batch_size=self.dataset.batch_size)
@@ -516,7 +521,7 @@ class MetaLearningSystemDataLoader(object):
             self.dataset.data_length['test'] = total_batches * self.dataset.batch_size
         self.dataset.switch_set(set_name="test")
         self.dataset.set_augmentation(augment_images=augment_images)
-        for sample_id, sample_batched in enumerate(self.get_dataloader(shuffle=False)):
+        for sample_id, sample_batched in enumerate(self.get_dataloader()):
             preprocess_sample = self.sample_iter_data(sample=sample_batched, num_gpus=self.dataset.num_of_gpus,
                                                       samples_per_iter=self.batches_per_iter,
                                                       batch_size=self.dataset.batch_size)
