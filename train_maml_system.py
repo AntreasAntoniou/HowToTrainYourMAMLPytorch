@@ -1,6 +1,6 @@
 from data import MetaLearningSystemDataLoader
 from experiment_builder import ExperimentBuilder
-from one_shot_learning_network import MAMLFewShotClassifier
+from few_shot_learning_system import MAMLFewShotClassifier
 from utils.parser_utils import get_args
 
 args, device = get_args()
