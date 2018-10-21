@@ -10,7 +10,7 @@ class ExperimentBuilder(object):
         self.args, self.device = args, device
 
         self.model = model
-        self.data = data
+
 
         self.saved_models_filepath, self.logs_filepath, self.samples_filepath = build_experiment_folder(experiment_name=self.args.experiment_name)
 
@@ -30,7 +30,7 @@ class ExperimentBuilder(object):
                 self.model.load_model(model_save_dir=self.saved_models_filepath, model_name="train_model",
                                  model_idx=self.args.continue_from_epoch)
             self.start_epoch = int(self.state['current_iter'] / self.args.total_iter_per_epoch)
-            self.data.continue_from_iter(current_iter=self.state['current_iter'])
+
         elif self.args.continue_from_epoch == -1:
             self.create_summary_csv = True
         elif self.args.continue_from_epoch == -2:
@@ -41,11 +41,12 @@ class ExperimentBuilder(object):
                     self.model.load_model(model_save_dir=self.saved_models_filepath, model_name="train_model",
                                      model_idx='latest')
                 self.start_epoch = int(self.state['current_iter'] / self.args.total_iter_per_epoch)
-                self.data.continue_from_iter(current_iter=self.state['current_iter'])
+
             else:
                 self.args.continue_from_epoch = -1
                 self.create_summary_csv = True
 
+        self.data = data(args=args, current_iter=self.state['current_iter'])
 
         print("train_seed {}, val_seed: {}, at start time".format(self.data.dataset.seed["train"],
                                                                   self.data.dataset.seed["val"]))
@@ -62,8 +63,8 @@ class ExperimentBuilder(object):
             summary_losses = dict()
 
         for key in total_losses:
-            summary_losses["{}_{}_mean".format(phase, key)] = np.mean(total_losses[key])  #:.5f
-            summary_losses["{}_{}_std".format(phase, key)] = np.std(total_losses[key])  #:.5f
+            summary_losses["{}_{}_mean".format(phase, key)] = np.mean(total_losses[key])
+            summary_losses["{}_{}_std".format(phase, key)] = np.std(total_losses[key])
 
         return summary_losses
 
@@ -233,8 +234,7 @@ class ExperimentBuilder(object):
                                                                           list(test_losses.values()),
                                                                           create=False, filename="test_summary.csv")
 
-                            print("Best validation accuracy", self.state['best_val_acc'], self.state['best_val_iter'])
-                            print("Testing accuracy", best_test_acc)
+                            print("saved test performance at", summary_statistics_filepath)
 
                         if self.epochs_done_in_this_run >= self.total_epochs_before_pause:
                             print("train_seed {}, val_seed: {}, at pause time".format(self.data.dataset.seed["train"],
