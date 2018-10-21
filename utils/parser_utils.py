@@ -114,9 +114,7 @@ def extract_args_from_json(json_file_path, args_dict):
         summary_dict = json.load(fp=f)
 
     for key in summary_dict.keys():
-        if "epoch_stats" in key:
-            break
-        elif "continue_from" in key:
+        if "continue_from" in key:
             pass
         elif "gpu_to_use" in key:
             pass

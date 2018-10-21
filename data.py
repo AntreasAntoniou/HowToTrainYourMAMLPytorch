@@ -102,6 +102,7 @@ def get_transforms_for_dataset(dataset_name, args, k):
     return transform_train, transform_evaluate
 
 
+
 class FewShotLearningDatasetParallel(Dataset):
     def __init__(self, args):
         """
@@ -120,10 +121,10 @@ class FewShotLearningDatasetParallel(Dataset):
         self.current_set_name = "train"
         self.num_target_samples = args.num_target_samples
         self.reset_stored_filepaths = args.reset_stored_filepaths
-        self.init_seed = {"train": args.train_seed, "val": args.val_seed, "test": args.val_seed}
-        self.seed = {"train": args.train_seed, "val": args.val_seed, "test": args.val_seed}
+        self.init_seed = {"train": args.train_seed, "val": args.val_seed, 'test': args.val_seed}
+        self.seed = {"train": args.train_seed, "val": args.val_seed, 'test': args.val_seed}
         self.rng = np.random.RandomState(seed=self.seed['val'])
-        self.x_train, self.x_val, self.x_test = self.load_dataset()
+        self.datasets = self.load_dataset()
         self.num_of_gpus = args.num_of_gpus
         self.batch_size = args.batch_size
         self.reverse_channels = args.reverse_channels
@@ -136,13 +137,10 @@ class FewShotLearningDatasetParallel(Dataset):
         self.num_samples_per_class = args.num_samples_per_class
         self.num_classes_per_set = args.num_classes_per_set
 
-        self.indexes = {"train": 0, "val": 0, "test": 0}
-        self.datasets = {"train": self.x_train,
-                         "val": self.x_val,
-                         "test": self.x_test}
-        self.dataset_size_dict = {"train": {key: len(self.x_train[key]) for key in list(self.x_train.keys())},
-                                  "val": {key: len(self.x_val[key]) for key in list(self.x_val.keys())},
-                                  "test": {key: len(self.x_test[key]) for key in list(self.x_test.keys())}}
+        self.indexes = {"train": 0, "val": 0, 'test': 0}
+        self.dataset_size_dict = {"train": {key: len(self.datasets['train'][key]) for key in list(self.datasets['train'].keys())},
+                                  "val": {key: len(self.datasets['val'][key]) for key in list(self.datasets['val'].keys())},
+                                  'test': {key: len(self.datasets['test'][key]) for key in list(self.datasets['test'].keys())}}
         self.label_set = self.get_label_set()
         self.data_length = {name: np.sum([len(self.datasets[name][key])
                                           for key in self.datasets[name]]) for name in self.datasets.keys()}
@@ -159,26 +157,40 @@ class FewShotLearningDatasetParallel(Dataset):
         """
         rng = np.random.RandomState(seed=self.seed['val'])
         data_image_paths, index_to_label_name_dict_file, label_to_index = self.load_datapaths()
-        total_label_types = len(data_image_paths)
-        num_classes_idx = np.arange(len(data_image_paths.keys()), dtype=np.int32)
-        rng.shuffle(num_classes_idx)
-        keys = list(data_image_paths.keys())
-        values = list(data_image_paths.values())
-        new_keys = [keys[idx] for idx in num_classes_idx]
-        new_values = [values[idx] for idx in num_classes_idx]
-        data_image_paths = dict(zip(new_keys, new_values))
-        # data_image_paths = self.shuffle(data_image_paths)
-        x_train_id, x_val_id, x_test_id = int(self.train_val_test_split[0] * total_label_types), \
-                                          int(np.sum(self.train_val_test_split[:2]) * total_label_types), \
-                                          int(total_label_types)
-        print(x_train_id, x_val_id, x_test_id)
-        x_train_classes = (class_key for class_key in list(data_image_paths.keys())[:x_train_id])
-        x_val_classes = (class_key for class_key in list(data_image_paths.keys())[x_train_id:x_val_id])
-        x_test_classes = (class_key for class_key in list(data_image_paths.keys())[x_val_id:x_test_id])
-        x_train, x_val, x_test = {class_key: data_image_paths[class_key] for class_key in x_train_classes}, \
-                                 {class_key: data_image_paths[class_key] for class_key in x_val_classes}, \
-                                 {class_key: data_image_paths[class_key] for class_key in x_test_classes},
-        return x_train, x_val, x_test
+        dataset_splits = dict()
+        if self.args.sets_are_pre_split == True:
+            for key, value in data_image_paths.items():
+                key = self.get_label_from_index(index=key)
+                bits = key.split("/")
+                set_name = bits[0]
+                class_label = bits[1]
+                if set_name not in dataset_splits:
+                    dataset_splits[set_name] = {class_label: value}
+                else:
+                    dataset_splits[set_name][class_label] = value
+            return dataset_splits
+        else:
+            total_label_types = len(data_image_paths)
+            num_classes_idx = np.arange(len(data_image_paths.keys()), dtype=np.int32)
+            rng.shuffle(num_classes_idx)
+            keys = list(data_image_paths.keys())
+            values = list(data_image_paths.values())
+            new_keys = [keys[idx] for idx in num_classes_idx]
+            new_values = [values[idx] for idx in num_classes_idx]
+            data_image_paths = dict(zip(new_keys, new_values))
+            # data_image_paths = self.shuffle(data_image_paths)
+            x_train_id, x_val_id, x_test_id = int(self.train_val_test_split[0] * total_label_types), \
+                                              int(np.sum(self.train_val_test_split[:2]) * total_label_types), \
+                                              int(total_label_types)
+            print(x_train_id, x_val_id, x_test_id)
+            x_train_classes = (class_key for class_key in list(data_image_paths.keys())[:x_train_id])
+            x_val_classes = (class_key for class_key in list(data_image_paths.keys())[x_train_id:x_val_id])
+            x_test_classes = (class_key for class_key in list(data_image_paths.keys())[x_val_id:x_test_id])
+            x_train, x_val, x_test = {class_key: data_image_paths[class_key] for class_key in x_train_classes}, \
+                                     {class_key: data_image_paths[class_key] for class_key in x_val_classes}, \
+                                     {class_key: data_image_paths[class_key] for class_key in x_test_classes},
+            dataset_splits = {"train": x_train, "val": x_val, "test": x_test}
+            return dataset_splits
 
     def load_datapaths(self):
         """
@@ -215,24 +227,6 @@ class FewShotLearningDatasetParallel(Dataset):
             self.save_to_json(dict_to_store=code_to_label_name, filename=self.index_to_label_name_dict_file)
             self.save_to_json(dict_to_store=label_name_to_code, filename=self.label_name_to_map_dict_file)
             return self.load_datapaths()
-
-    # def save_dict(self, obj, name):
-    #     """
-    #     Saves a dictionary as a pickle object
-    #     :param obj: A dict object to be saved
-    #     :param name: String containing the target pickle-object name
-    #     """
-    #     with open(name, 'wb') as f:
-    #         pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
-    #
-    # def load_dict(self, name):
-    #     """
-    #     Load a pickle object and cast it as a dict object
-    #     :param name:
-    #     :return:
-    #     """
-    #     with open(name, 'rb') as f:
-    #         return pickle.load(f)
 
     def save_to_json(self, filename, dict_to_store):
         with open(os.path.abspath(filename), 'w') as f:
@@ -323,7 +317,7 @@ class FewShotLearningDatasetParallel(Dataset):
 
     def get_label_from_path(self, filepath):
         label_bits = filepath.split("/")
-        label = "_".join([label_bits[idx] for idx in self.indexes_of_folders_indicating_class])
+        label = "/".join([label_bits[idx] for idx in self.indexes_of_folders_indicating_class])
         if self.labels_as_int:
             label = int(label)
         return label
@@ -404,10 +398,7 @@ class FewShotLearningDatasetParallel(Dataset):
         :return: A data batch
         """
         rng = np.random.RandomState(seed)
-        # if dataset_name == 'train':
-        #
-        #     print("<<<<<<<<<<<<<<<<<<<<<<<<<<<seed>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>", seed)
-        # print(self.num_classes_per_set, len(list(self.dataset_size_dict[dataset_name].keys())))
+
         selected_classes = rng.choice(list(self.dataset_size_dict[dataset_name].keys()),
                                       size=self.num_classes_per_set, replace=False)
         rng.shuffle(selected_classes)
@@ -459,7 +450,7 @@ class FewShotLearningDatasetParallel(Dataset):
     def set_augmentation(self, augment_images):
         self.augment_images = augment_images
 
-    def switch_set(self, set_name, current_iter=100):
+    def switch_set(self, set_name, current_iter=None):
         self.current_set_name = set_name
         if set_name == "train":
             self.update_seed(dataset_name=set_name, seed=self.init_seed[set_name] + current_iter)
@@ -480,7 +471,7 @@ class FewShotLearningDatasetParallel(Dataset):
 
 
 class MetaLearningSystemDataLoader(object):
-    def __init__(self, args):
+    def __init__(self, args, current_iter=0):
         self.num_of_gpus = args.num_of_gpus
         self.batch_size = args.batch_size
         self.samples_per_iter = args.samples_per_iter
@@ -489,6 +480,7 @@ class MetaLearningSystemDataLoader(object):
         self.dataset = FewShotLearningDatasetParallel(args=args)
         self.batches_per_iter = args.samples_per_iter
         self.full_data_length = self.dataset.data_length
+        self.continue_from_iter(current_iter=current_iter)
 
     def get_dataloader(self):
         return DataLoader(self.dataset, batch_size=(self.num_of_gpus * self.batch_size * self.samples_per_iter),
@@ -530,7 +522,7 @@ class MetaLearningSystemDataLoader(object):
             self.dataset.data_length = self.full_data_length
         else:
             self.dataset.data_length['test'] = total_batches * self.dataset.batch_size
-        self.dataset.switch_set(set_name="test")
+        self.dataset.switch_set(set_name='test')
         self.dataset.set_augmentation(augment_images=augment_images)
         for sample_id, sample_batched in enumerate(self.get_dataloader()):
             preprocess_sample = self.sample_iter_data(sample=sample_batched, num_gpus=self.dataset.num_of_gpus,
