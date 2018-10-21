@@ -27,7 +27,7 @@ def get_args():
     parser.add_argument('--reset_stored_paths', type=str, default="False")
     parser.add_argument('--experiment_name', nargs="?", type=str, )
     parser.add_argument('--architecture_name', nargs="?", type=str)
-    parser.add_argument('--continue_from_epoch', nargs="?", type=int, default=-2, help='Continue from checkpoint of epoch')
+    parser.add_argument('--continue_from_epoch', nargs="?", type=str, default='latest', help='Continue from checkpoint of epoch')
     parser.add_argument('--dropout_rate_value', type=float, default=0.3, help='Dropout_rate_value')
     parser.add_argument('--num_target_samples', type=int, default=15, help='Dropout_rate_value')
     parser.add_argument('--second_order', type=str, default="False", help='Dropout_rate_value')
