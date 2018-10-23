@@ -8,6 +8,14 @@ import time
 
 class ExperimentBuilder(object):
     def __init__(self, args, data, model, device):
+        """
+        Initializes an experiment builder using a named tuple (args), a data provider (data), a meta learning system
+        (model) and a device (e.g. gpu/cpu/n)
+        :param args: A namedtuple containing all experiment hyperparameters
+        :param data: A data provider of instance MetaLearningSystemDataLoader
+        :param model: A meta learning system instance
+        :param device: Device/s to use for the experiment
+        """
         self.args, self.device = args, device
 
         self.model = model
@@ -38,7 +46,7 @@ class ExperimentBuilder(object):
                 self.start_epoch = int(self.state['current_iter'] / self.args.total_iter_per_epoch)
 
             else:
-                self.args.continue_from_epoch = -1
+                self.args.continue_from_epoch = 'from_scratch'
                 self.create_summary_csv = True
         elif int(self.args.continue_from_epoch) >= 0:
             self.state = \
@@ -60,6 +68,13 @@ class ExperimentBuilder(object):
         print(self.state['current_iter'], int(self.args.total_iter_per_epoch * self.args.total_epochs))
 
     def build_summary_dict(self, total_losses, phase, summary_losses=None):
+        """
+        Builds/Updates a summary dict directly from the metric dict of the current iteration.
+        :param total_losses: Current dict with total losses (not aggregations) from experiment
+        :param phase: Current training phase
+        :param summary_losses: Current summarised (aggregated/summarised) losses stats means, stdv etc.
+        :return: A new summary dict with the updated summary statistics information.
+        """
         if summary_losses is None:
             summary_losses = dict()
 
@@ -70,6 +85,11 @@ class ExperimentBuilder(object):
         return summary_losses
 
     def build_loss_summary_string(self, summary_losses):
+        """
+        Builds a progress bar summary string given current summary losses dictionary
+        :param summary_losses: Current summary statistics
+        :return: A summary string ready to be shown to humans.
+        """
         output_update = ""
         for key, value in zip(list(summary_losses.keys()), list(summary_losses.values())):
             if "loss" in key or "accuracy" in key:
@@ -85,6 +105,16 @@ class ExperimentBuilder(object):
         return z
 
     def train_iteration(self, train_sample, sample_idx, epoch_idx, total_losses, current_iter, pbar_train):
+        """
+        Runs a training iteration, updates the progress bar and returns the total and current epoch train losses.
+        :param train_sample: A sample from the data provider
+        :param sample_idx: The index of the incoming sample, in relation to the current training run.
+        :param epoch_idx: The epoch index.
+        :param total_losses: The current total losses dictionary to be updated.
+        :param current_iter: The current training iteration in relation to the whole experiment.
+        :param pbar_train: The progress bar of the training.
+        :return: Updates total_losses, train_losses, current_iter
+        """
         x_support_set, x_target_set, y_support_set, y_target_set = train_sample
         data_batch = (x_support_set[0, 0], x_target_set[0, 0], y_support_set[0, 0], y_target_set[0, 0])
 
@@ -108,9 +138,16 @@ class ExperimentBuilder(object):
 
         current_iter += 1
 
-        return total_losses, train_losses, current_iter
+        return train_losses, total_losses, current_iter
 
     def evaluation_iteration(self, val_sample, total_losses, pbar_val):
+        """
+        Runs a validation iteration, updates the progress bar and returns the total and current epoch val losses.
+        :param val_sample: A sample from the data provider
+        :param total_losses: The current total losses dictionary to be updated.
+        :param pbar_val: The progress bar of the val stage.
+        :return: The updated val_losses, total_losses
+        """
         x_support_set, x_target_set, y_support_set, y_target_set = val_sample
         data_batch = (
             x_support_set[0, 0], x_target_set[0, 0], y_support_set[0, 0], y_target_set[0, 0])
@@ -131,6 +168,15 @@ class ExperimentBuilder(object):
         return val_losses, total_losses
 
     def save_models(self, model, epoch, state):
+        """
+        Saves two separate instances of the current model. One to be kept for history and reloading later and another
+        one marked as "latest" to be used by the system for the next epoch training. Useful when the training/val
+        process is interrupted or stopped. Leads to fault tolerant training and validation systems that can continue
+        from where they left off before.
+        :param model: Current meta learning model of any instance within the few_shot_learning_system.py
+        :param epoch: Current epoch
+        :param state: Current model and experiment state dict.
+        """
         model.save_model(model_save_dir=os.path.join(self.saved_models_filepath, "train_model_{}".format(int(epoch))),
                          state=state)
 
@@ -140,6 +186,16 @@ class ExperimentBuilder(object):
         print("saved models to", self.saved_models_filepath)
 
     def pack_and_save_metrics(self, start_time, create_summary_csv, train_losses, val_losses):
+        """
+        Given current epochs start_time, train losses, val losses and whether to create a new stats csv file, pack stats
+        and save into a statistics csv file. Return a new start time for the new epoch.
+        :param start_time: The start time of the current epoch
+        :param create_summary_csv: A boolean variable indicating whether to create a new statistics file or
+        append results to existing one
+        :param train_losses: A dictionary with the current train losses
+        :param val_losses: A dictionary with the currrent val loss
+        :return: The current time, to be used for the next epoch.
+        """
         epoch_summary_losses = self.merge_two_dicts(first_dict=train_losses, second_dict=val_losses)
         epoch_summary_string = self.build_loss_summary_string(epoch_summary_losses)
         epoch_summary_losses["epoch"] = self.epoch
@@ -158,7 +214,10 @@ class ExperimentBuilder(object):
         return start_time
 
     def run_experiment(self):
-
+        """
+        Runs a full training experiment with evaluations of the model on the val set at every epoch. Furthermore,
+        will return the test set evaluation results on the best performing validation model.
+        """
         with tqdm.tqdm(initial=self.state['current_iter'],
                        total=int(self.args.total_iter_per_epoch * self.args.total_epochs)) as pbar_train:
 
@@ -171,7 +230,7 @@ class ExperimentBuilder(object):
                                                                       'current_iter'],
                                                     augment_images=self.augment_flag)):
                     # print(self.state['current_iter'], (self.args.total_epochs * self.args.total_iter_per_epoch))
-                    total_losses, train_losses, self.state['current_iter'] = self.train_iteration(
+                    train_losses, total_losses, self.state['current_iter'] = self.train_iteration(
                         train_sample=train_sample,
                         total_losses=self.total_losses,
                         epoch_idx=(self.state['current_iter'] /

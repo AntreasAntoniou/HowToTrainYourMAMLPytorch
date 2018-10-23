@@ -312,10 +312,20 @@ class FewShotLearningDatasetParallel(Dataset):
         return label_to_index[label]
 
     def get_label_from_index(self, index):
+        """
+        Given an index return the human understandable label mapping to it.
+        :param index: A numerical index (int)
+        :return: A human understandable label (str)
+        """
         index_to_label_name = self.load_from_json(filename=self.index_to_label_name_dict_file)
         return index_to_label_name[index]
 
     def get_label_from_path(self, filepath):
+        """
+        Given a path of an image generate the human understandable label for that image.
+        :param filepath: The image's filepath
+        :return: A human understandable label.
+        """
         label_bits = filepath.split("/")
         label = "/".join([label_bits[idx] for idx in self.indexes_of_folders_indicating_class])
         if self.labels_as_int:
@@ -323,6 +333,12 @@ class FewShotLearningDatasetParallel(Dataset):
         return label
 
     def load_image(self, image_path, channels):
+        """
+        Given an image filepath and the number of channels to keep, load an image and keep the specified channels
+        :param image_path: The image's filepath
+        :param channels: The number of channels to keep
+        :return: An image array of shape (h, w, channels), whose values range between 0.0 and 1.0.
+        """
         image = Image.open(image_path)
         if 'omniglot' in self.dataset_name:
             image = image.resize((self.image_height, self.image_width), resample=Image.LANCZOS)
@@ -338,7 +354,11 @@ class FewShotLearningDatasetParallel(Dataset):
         return image
 
     def load_batch(self, batch_image_paths):
-
+        """
+        Load a batch of images, given a list of filepaths
+        :param batch_image_paths: A list of filepaths
+        :return: A numpy array of images of shape batch, height, width, channels
+        """
         image_batch = []
 
         for image_path in batch_image_paths:
@@ -352,13 +372,10 @@ class FewShotLearningDatasetParallel(Dataset):
 
     def preprocess_data(self, x):
         """
-        Preprocesses data such that their values lie in the -1.0 to 1.0 range so that the tanh activation gen output
-        can work properly
+        Preprocesses data such that their shapes match the specified structures
         :param x: A data batch to preprocess
         :return: A preprocessed data batch
         """
-        # x = x / 255.0
-        # x = 2 * x - 1
         x_shape = x.shape
         x = np.reshape(x, (-1, x_shape[-3], x_shape[-2], x_shape[-1]))
         if self.reverse_channels is True:
@@ -367,7 +384,6 @@ class FewShotLearningDatasetParallel(Dataset):
                 reverse_photos[:, :, :, x.shape[-1] - 1 - channel] = x[:, :, :, channel]
             x = reverse_photos
         x = x.reshape(x_shape)
-        # print(x.mean(), x.min(), x.max())
         return x
 
     def reconstruct_original(self, x):
@@ -376,26 +392,25 @@ class FewShotLearningDatasetParallel(Dataset):
         :param x: A batch of data to reconstruct
         :return: A reconstructed batch of data
         """
-        x = (x + 1) / 2
         x = x * 255.0
         return x
 
-    def shuffle(self, x):
+    def shuffle(self, x, rng):
         """
         Shuffles the data batch along it's first axis
         :param x: A data batch
         :return: A shuffled data batch
         """
         indices = np.arange(len(x))
-        np.random.shuffle(indices)
+        rng.shuffle(indices)
         x = x[indices]
         return x
 
     def get_set(self, dataset_name, seed, augment_images=False):
         """
         Generates a task-set to be used for training or evaluation
-        :param set_name: The name of the set to use, e.g. "train", "val" etc
-        :return: A data batch
+        :param set_name: The name of the set to use, e.g. "train", "val" etc.
+        :return: A task-set containing an image and label support set, and an image and label target set.
         """
         rng = np.random.RandomState(seed)
 
@@ -472,6 +487,13 @@ class FewShotLearningDatasetParallel(Dataset):
 
 class MetaLearningSystemDataLoader(object):
     def __init__(self, args, current_iter=0):
+        """
+        Initializes a meta learning system dataloader. The data loader uses the Pytorch DataLoader class to parallelize
+        batch sampling and preprocessing.
+        :param args: An arguments NamedTuple containing all the required arguments.
+        :param current_iter: Current iter of experiment. Is used to make sure the data loader continues where it left
+        of previously.
+        """
         self.num_of_gpus = args.num_of_gpus
         self.batch_size = args.batch_size
         self.samples_per_iter = args.samples_per_iter
@@ -483,14 +505,26 @@ class MetaLearningSystemDataLoader(object):
         self.continue_from_iter(current_iter=current_iter)
 
     def get_dataloader(self):
+        """
+        Returns a data loader with the correct set (train, val or test), continuing from the current iter.
+        :return:
+        """
         return DataLoader(self.dataset, batch_size=(self.num_of_gpus * self.batch_size * self.samples_per_iter),
                           shuffle=False, num_workers=self.num_workers, drop_last=True)
 
     def continue_from_iter(self, current_iter):
+        """
+        Makes sure the data provider is aware of where we are in terms of training iterations in the experiment.
+        :param current_iter:
+        """
         self.total_train_iters_produced += (current_iter * (self.num_of_gpus * self.batch_size * self.samples_per_iter))
 
     def get_train_batches(self, total_batches=-1, augment_images=False):
-
+        """
+        Returns a training batches data_loader
+        :param total_batches: The number of batches we want the data loader to sample
+        :param augment_images: Whether we want the images to be augmented.
+        """
         if total_batches == -1:
             self.dataset.data_length = self.full_data_length
         else:
@@ -505,6 +539,11 @@ class MetaLearningSystemDataLoader(object):
             yield preprocess_sample
 
     def get_val_batches(self, total_batches=-1, augment_images=False):
+        """
+        Returns a validation batches data_loader
+        :param total_batches: The number of batches we want the data loader to sample
+        :param augment_images: Whether we want the images to be augmented.
+        """
         if total_batches == -1:
             self.dataset.data_length = self.full_data_length
         else:
@@ -518,6 +557,11 @@ class MetaLearningSystemDataLoader(object):
             yield preprocess_sample
 
     def get_test_batches(self, total_batches=-1, augment_images=False):
+        """
+        Returns a testing batches data_loader
+        :param total_batches: The number of batches we want the data loader to sample
+        :param augment_images: Whether we want the images to be augmented.
+        """
         if total_batches == -1:
             self.dataset.data_length = self.full_data_length
         else:
@@ -531,23 +575,19 @@ class MetaLearningSystemDataLoader(object):
             yield preprocess_sample
 
     def sample_iter_data(self, sample, num_gpus, batch_size, samples_per_iter):
+        """
+        Given a dict containing batch of samples each of size (num_gpus * batch_size * samples_per_iter) +
+        (object_shape_tuple) will return
+        a list of samples each of size (num_gpus, batch_size, samples_per_iter) + (object_shape_tuple)
+        :param sample: A dictionary containing batches of samples
+        :param num_gpus: The number of gpus to use
+        :param batch_size: The batch size
+        :param samples_per_iter: The number of samples for each iterations
+        :return: A list of reshaped numpy arrays to match the shape
+        (num_gpus, batch_size, samples_per_iter) + (object_shape_tuple)
+        """
         output_sample = []
         for key in sample.keys():
-            sample[key] = np.array(sample[key].numpy(), dtype=np.float32)
-            new_shape = []
-            curr_id = 1
-
-            for i in range(len(sample[key].shape) + 2):
-                if i == 0:
-                    new_shape.append(samples_per_iter)
-                elif i == 1:
-                    new_shape.append(num_gpus)
-                elif i == 2:
-                    new_shape.append(batch_size)
-                else:
-                    new_shape.append(sample[key].shape[curr_id])
-                    curr_id += 1
-
-            output_sample.append(np.reshape(sample[key], newshape=new_shape))
-
+            _temp = np.array(sample[key].numpy(), dtype=np.float32)
+            output_sample.append(np.reshape(_temp, newshape=(num_gpus, samples_per_iter, batch_size)+_temp.shape[1:]))
         return output_sample

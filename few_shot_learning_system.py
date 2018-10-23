@@ -20,6 +20,11 @@ import numpy as np
 
 
 def set_torch_seed(seed):
+    """
+    Sets the pytorch seeds for current experiment run
+    :param seed: The seed (int)
+    :return: A random number generator to use
+    """
     rng = np.random.RandomState(seed=seed)
     torch_seed = rng.randint(0, 999999)
     torch.manual_seed(seed=torch_seed)
@@ -29,9 +34,11 @@ def set_torch_seed(seed):
 
 class MAMLFewShotClassifier(nn.Module):
     def __init__(self, im_shape, device, args):
-
         """
-
+        Initializes a MAML few shot learning system
+        :param im_shape: The images input size, in batch, c, h, w shape
+        :param device: The device to use to use the model on.
+        :param args: A namedtuple of arguments specifying various hyperparameters.
         """
         super(MAMLFewShotClassifier, self).__init__()
         self.args = args
@@ -77,6 +84,12 @@ class MAMLFewShotClassifier(nn.Module):
                                                               eta_min=self.args.min_learning_rate)
 
     def get_per_step_loss_importance_vector(self):
+        """
+        Generates a tensor of dimensionality (num_inner_loop_steps) indicating the importance of each step's target
+        loss towards the optimization loss.
+        :return: A tensor to be used to compute the weighted average of the loss, useful for
+        the MSL (Multi Step Loss) mechanism.
+        """
         loss_weights = np.ones(shape=(self.args.number_of_training_steps_per_iter)) * (
                     1.0 / self.args.number_of_training_steps_per_iter)
         decay_rate = 1.0 / self.args.number_of_training_steps_per_iter / 15.
@@ -88,12 +101,16 @@ class MAMLFewShotClassifier(nn.Module):
         curr_value = np.minimum(
             loss_weights[-1] + (self.current_epoch * (self.args.number_of_training_steps_per_iter - 1) * decay_rate),
             1.0 - ((self.args.number_of_training_steps_per_iter - 1) * min_value_for_non_final_losses))
-        loss_weights[-2] = curr_value
-        loss_weights[-1] = np.sum(loss_weights[:-1])
+        loss_weights[-1] = curr_value
         loss_weights = torch.Tensor(loss_weights).to(device=self.device)
         return loss_weights
 
     def get_inner_loop_parameter_dict(self, params):
+        """
+        Returns a dictionary with the parameters to use for inner loop updates.
+        :param params: A dictionary of the network's parameters.
+        :return: A dictionary of the parameters to use for the inner loop optimization process.
+        """
         param_dict = dict()
         for name, param in params:
             if "norm_layer" in name:
@@ -107,7 +124,15 @@ class MAMLFewShotClassifier(nn.Module):
         return param_dict
 
     def apply_inner_loop_update(self, loss, names_weights_copy, use_second_order, current_step_idx):
-
+        """
+        Applies an inner loop update given current step's loss, the weights to update, a flag indicating whether to use
+        second order derivatives and the current step's index.
+        :param loss: Current step's loss with respect to the support set.
+        :param names_weights_copy: A dictionary with names to parameters to update.
+        :param use_second_order: A boolean flag of whether to use second order derivatives.
+        :param current_step_idx: Current step's index.
+        :return: A dictionary with the updated weights (name, param)
+        """
         grads = torch.autograd.grad(loss, names_weights_copy.values(),
                                     create_graph=use_second_order)
 
@@ -144,8 +169,15 @@ class MAMLFewShotClassifier(nn.Module):
 
     def forward(self, data_batch, epoch, use_second_order, optimize_final_target_loss_only, num_steps, training_phase):
         """
-
-        :return:
+        Runs a forward outer loop pass on the batch of tasks using the MAML/++ framework.
+        :param data_batch: A data batch containing the support and target sets.
+        :param epoch: Current epoch's index
+        :param use_second_order: A boolean saying whether to use second order derivatives.
+        :param optimize_final_target_loss_only: Whether to optimize on the outer loop using just the last step's
+        target loss (True) or whether to use multi step loss which improves the stability of the system (False)
+        :param num_steps: Number of inner loop steps.
+        :param training_phase: Whether this is a training phase (True) or an evaluation phase (False)
+        :return: A dictionary with the collected losses of the current outer forward propagation.
         """
         x_support_set, x_target_set, y_support_set, y_target_set = data_batch
 
@@ -217,40 +249,64 @@ class MAMLFewShotClassifier(nn.Module):
                                                    total_accuracies=total_accuracies,
                                                    names_weights_copy=names_weights_copy)
 
+        for idx, item in enumerate(per_step_loss_importance_vectors):
+            losses['loss_importance_vector_{}'.format(idx)] = item.detach().cpu().numpy()
+
         return losses
 
     def net_forward(self, x, y, weights, reset_running_statistics, training, num_step):
-        ''' Run data through net, return loss and output '''
+        """
+        A base model forward pass on some data points x. Using the parameters in the weights dictionary. Also requires
+        boolean flags indicating whether to reset the running statistics at the end of the run (if at evaluation phase).
+        A flag indicating whether this is the training session and an int indicating the current step's number in the
+        inner loop.
+        :param x: A data batch of shape b, c, h, w
+        :param y: A data targets batch of shape b, n_classes
+        :param weights: A dictionary containing the weights to pass to the network.
+        :param reset_running_statistics: A flag indicating whether to reset the batch norm running statistics to their
+         previous values after the run (only for evaluation)
+        :param training: A flag indicating whether the current process phase is a training or evaluation.
+        :param num_step: An integer indicating the number of the step in the inner loop.
+        :return: the crossentropy losses with respect to the given y, the predictions of the base model.
+        """
         input_var = torch.autograd.Variable(x).to(device=self.device)
         target_var = torch.autograd.Variable(y).to(device=self.device)
-        # Run the batch through the net, compute loss
+
         preds = self.classifier.forward(x=input_var, params=weights,
                                         training=training,
                                         reset_running_statistics=reset_running_statistics, num_step=num_step)
 
-        target_preds = preds
-        loss = F.cross_entropy(input=target_preds, target=target_var)
+        loss = F.cross_entropy(input=preds, target=target_var)
 
-        return loss, target_preds
+        return loss, preds
 
     def trainable_parameters(self):
+        """
+        Returns an iterator over the trainable parameters of the model.
+        """
         for param in self.parameters():
             if param.requires_grad:
                 yield param
 
-    def train_iter(self, data_batch, epoch):
-        # print("\n second_order", self.args.second_order and
-        #       epoch > self.args.first_order_to_second_order_epoch)
+    def train_forward_prop(self, data_batch, epoch):
+        """
+        Runs an outer loop forward prop using the meta-model and base-model.
+        :param data_batch: A data batch containing the support set and the target set input, output pairs.
+        :param epoch: The index of the currrent epoch.
+        :return: A dictionary of losses for the current step.
+        """
         losses = self.forward(data_batch=data_batch, epoch=epoch, use_second_order=self.args.second_order and
                                                                                    epoch > self.args.first_order_to_second_order_epoch,
                               optimize_final_target_loss_only=self.args.optimize_final_target_loss_only,
                               num_steps=self.args.number_of_training_steps_per_iter, training_phase=True)
         return losses
 
-    def evaluation_iter(self, data_batch, epoch):
+    def evaluation_forward_prop(self, data_batch, epoch):
         """
-        Builds tf graph for Matching Networks, produces losses and summary statistics.
-        :return:
+        Runs an outer loop evaluation forward prop using the meta-model and base-model.
+        :param data_batch: A data batch containing the support set and the target set input, output pairs.
+        :param epoch: The index of the currrent epoch.
+        :return: A dictionary of losses for the current step.
         """
         losses = self.forward(data_batch=data_batch, epoch=epoch, use_second_order=False,
                               optimize_final_target_loss_only=True,
@@ -259,26 +315,25 @@ class MAMLFewShotClassifier(nn.Module):
         return losses
 
     def meta_update(self, loss):
-
+        """
+        Applies an outer loop update on the meta-parameters of the model.
+        :param loss: The current crossentropy loss.
+        """
         self.optimizer.zero_grad()
         loss.backward()
         if 'imagenet' in self.args.dataset_name:
             for name, param in self.classifier.named_parameters():
                 if param.requires_grad:
-                    # print(name)
                     param.grad.data.clamp_(-10, 10)
-        # Update the net parameters with the accumulated gradient according to optimizer
         self.optimizer.step()
 
     def run_train_iter(self, data_batch, epoch):
         """
-        Builds the train op
-        :param losses: A dictionary containing the losses
-        :param learning_rate: Learning rate to be used for Adam
-        :param beta1: Beta1 to be used for Adam
+        Runs an outer loop update step on the meta-model's parameters.
+        :param data_batch:
+        :param epoch:
         :return:
         """
-
         self.scheduler.step(epoch=epoch)
         if self.current_epoch != epoch:
             self.current_epoch = epoch
@@ -295,7 +350,7 @@ class MAMLFewShotClassifier(nn.Module):
 
         data_batch = (x_support_set, x_target_set, y_support_set, y_target_set)
 
-        losses = self.train_iter(data_batch=data_batch, epoch=epoch)
+        losses = self.train_forward_prop(data_batch=data_batch, epoch=epoch)
 
         self.meta_update(loss=losses['loss'])
         losses['learning_rate'] = self.scheduler.get_lr()[0]
@@ -305,13 +360,6 @@ class MAMLFewShotClassifier(nn.Module):
         return losses
 
     def run_validation_iter(self, data_batch):
-        """
-        Builds the train op
-        :param losses: A dictionary containing the losses
-        :param learning_rate: Learning rate to be used for Adam
-        :param beta1: Beta1 to be used for Adam
-        :return:
-        """
 
         if self.training:
             self.eval()
@@ -325,14 +373,10 @@ class MAMLFewShotClassifier(nn.Module):
 
         data_batch = (x_support_set, x_target_set, y_support_set, y_target_set)
 
-        losses = self.evaluation_iter(data_batch=data_batch, epoch=self.current_epoch)
+        losses = self.evaluation_forward_prop(data_batch=data_batch, epoch=self.current_epoch)
 
         self.zero_grad()
         self.optimizer.zero_grad()
-
-        # for name, param in self.named_parameters():
-        #     if param.grad is not None and torch.sum(param.grad) > 0:
-        #         print(name, param.shape, param.grad)
 
         return losses
 

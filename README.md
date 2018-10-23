@@ -15,7 +15,7 @@ using the conda package management library. More specifically,
 If you have an existing miniconda3 installation please start at step 3. 
 If you want to  install both conda and the required packages, please run:
  1. ```wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh```
- 2. ``` bash Miniconda3-latest-Linux-x86_64.sh``` Go through the installation.
+ 2. Go through the installation.
  3. Activate conda
  4. conda create -n meta_learning_pytorch_env python=3.6.
  5. conda activate meta_learning_pytorch_env
@@ -123,7 +123,7 @@ subsequent step just pass the new inner loop/dynamic weights to the network.
 # Running an experiment
 
 To run an experiment from the paper on Omniglot:
-1. Activate your conda environment ```conda activate meta_learning_pytorch_env```
+1. Activate your conda environment ```conda activate pytorch_meta_learning_env```
 2. cd experiment_scripts
 3. Find which experiment you want to run.
 4. ```bash experiment_script.sh```
@@ -131,7 +131,7 @@ To run an experiment from the paper on Omniglot:
 Note: By downloading and using the mini-imagenet datasets, you accept terms and conditions found in [imagenet_license.md](https://github.com/AntreasAntoniou/HowToTrainYourMAMLPytorch/blob/master/imagenet_license.md) 
 
 To run an experiment from the paper on Mini-Imagenet:
-1. Activate your conda environment ```conda activate meta_learning_pytorch_env```
+1. Activate your conda environment ```conda activate pytorch_meta_learning_env```
 2. Download the mini_imagenet dataset from the [gdrive folder](https://drive.google.com/file/d/1ljP5AaiwZoS6LmEx6UquG_UScUaUd4-m/view?usp=sharing)
 3. copy the .pbzip file in datasets
 4. cd experiment_scripts
@@ -139,7 +139,7 @@ To run an experiment from the paper on Mini-Imagenet:
 6. ```bash experiment_script.sh```
 
 To run a custom/new experiment on any dataset:
-1. Activate your conda environment ```conda activate meta_learning_pytorch_env```
+1. Activate your conda environment ```conda activate pytorch_meta_learning_env```
 2. Make sure your data is in datasets/ in a folder structure the data provider can read.
 3. cd experiment_template_config
 4. Find an experiment close to what you want to do and open its config file.
