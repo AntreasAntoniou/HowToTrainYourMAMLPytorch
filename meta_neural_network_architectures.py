@@ -477,6 +477,9 @@ class MetaNormLayerConvReLU(nn.Module):
         return out
 
     def restore_backup_stats(self):
+        """
+        Restore stored statistics from the backup, replacing the current ones.
+        """
         if self.normalization:
             self.norm_layer.restore_backup_stats()
 
@@ -569,6 +572,13 @@ class VGGLeakyReLUNormNetwork(nn.Module):
         print("VGGNetwork build", out.shape)
 
     def create_new_nested_dictionary(self, depth_keys, value, key_exists=None):
+        """
+        Builds a graph dictionary from the passed depth_keys, value pair. Useful for dynamically passing external params
+        :param depth_keys: A list of strings making up the name of a variable. Used to make a graph for that params tree.
+        :param value: Param value
+        :param key_exists: If none then assume new dict, else load existing dict and add new key->value pairs to it.
+        :return: A dictionary graph of the params already added to the graph.
+        """
         temp_current_dictionary = {depth_keys[-1]: value}
 
         if key_exists is not None:
