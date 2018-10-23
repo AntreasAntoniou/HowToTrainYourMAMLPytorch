@@ -38,6 +38,7 @@ pip-delete-this-directory.txt
 
 #codebase-specific
 datasets/*
+MAML*
 
 # Unit test / coverage reports
 htmlcov/
