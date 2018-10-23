@@ -281,6 +281,9 @@ class MetaLayerNormLayer(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
+        """
+        Reset parameters to their initialization values.
+        """
         if self.elementwise_affine:
             self.weight.data.fill_(1)
             self.bias.data.zero_()
