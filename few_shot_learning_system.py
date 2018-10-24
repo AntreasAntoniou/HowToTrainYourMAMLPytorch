@@ -167,13 +167,13 @@ class MAMLFewShotClassifier(nn.Module):
 
         return losses
 
-    def forward(self, data_batch, epoch, use_second_order, optimize_final_target_loss_only, num_steps, training_phase):
+    def forward(self, data_batch, epoch, use_second_order, use_multi_step_loss_optimization, num_steps, training_phase):
         """
         Runs a forward outer loop pass on the batch of tasks using the MAML/++ framework.
         :param data_batch: A data batch containing the support and target sets.
         :param epoch: Current epoch's index
         :param use_second_order: A boolean saying whether to use second order derivatives.
-        :param optimize_final_target_loss_only: Whether to optimize on the outer loop using just the last step's
+        :param use_multi_step_loss_optimization: Whether to optimize on the outer loop using just the last step's
         target loss (True) or whether to use multi step loss which improves the stability of the system (False)
         :param num_steps: Number of inner loop steps.
         :param training_phase: Whether this is a training phase (True) or an evaluation phase (False)
@@ -218,7 +218,7 @@ class MAMLFewShotClassifier(nn.Module):
                                                                   use_second_order=use_second_order,
                                                                   current_step_idx=num_step)
 
-                if optimize_final_target_loss_only:
+                if not use_multi_step_loss_optimization:
                     if num_step == (self.args.number_of_training_steps_per_iter - 1):
                         target_loss, target_preds = self.net_forward(x=x_target_set_task,
                                                                      y=y_target_set_task, weights=names_weights_copy,
@@ -297,7 +297,7 @@ class MAMLFewShotClassifier(nn.Module):
         """
         losses = self.forward(data_batch=data_batch, epoch=epoch, use_second_order=self.args.second_order and
                                                                                    epoch > self.args.first_order_to_second_order_epoch,
-                              optimize_final_target_loss_only=self.args.optimize_final_target_loss_only,
+                              use_multi_step_loss_optimization=self.args.optimize_final_target_loss_only,
                               num_steps=self.args.number_of_training_steps_per_iter, training_phase=True)
         return losses
 
@@ -309,7 +309,7 @@ class MAMLFewShotClassifier(nn.Module):
         :return: A dictionary of losses for the current step.
         """
         losses = self.forward(data_batch=data_batch, epoch=epoch, use_second_order=False,
-                              optimize_final_target_loss_only=True,
+                              use_multi_step_loss_optimization=True,
                               num_steps=self.args.number_of_evaluation_steps_per_iter, training_phase=False)
 
         return losses
@@ -405,7 +405,7 @@ class MAMLFewShotClassifier(nn.Module):
         :return: A dictionary containing the experiment state and the saved model parameters.
         """
         filepath = os.path.join(model_save_dir, "{}_{}".format(model_name, model_idx))
-        checkpoint_state = torch.load(filepath)
-        state_dict_loaded = checkpoint_state['network']
+        state = torch.load(filepath)
+        state_dict_loaded = state['network']
         self.load_state_dict(state_dict=state_dict_loaded)
-        return checkpoint_state
+        return state

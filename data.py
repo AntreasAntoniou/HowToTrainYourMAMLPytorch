@@ -1,12 +1,12 @@
+import concurrent.futures
 import json
 import os
+
 import numpy as np
+import torch
+import tqdm
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
-import tqdm
-import concurrent.futures
-import pickle
-import torch
 from torchvision import transforms
 
 
@@ -102,7 +102,6 @@ def get_transforms_for_dataset(dataset_name, args, k):
     return transform_train, transform_evaluate
 
 
-
 class FewShotLearningDatasetParallel(Dataset):
     def __init__(self, args):
         """
@@ -138,9 +137,10 @@ class FewShotLearningDatasetParallel(Dataset):
         self.num_classes_per_set = args.num_classes_per_set
 
         self.indexes = {"train": 0, "val": 0, 'test': 0}
-        self.dataset_size_dict = {"train": {key: len(self.datasets['train'][key]) for key in list(self.datasets['train'].keys())},
-                                  "val": {key: len(self.datasets['val'][key]) for key in list(self.datasets['val'].keys())},
-                                  'test': {key: len(self.datasets['test'][key]) for key in list(self.datasets['test'].keys())}}
+        self.dataset_size_dict = {
+            "train": {key: len(self.datasets['train'][key]) for key in list(self.datasets['train'].keys())},
+            "val": {key: len(self.datasets['val'][key]) for key in list(self.datasets['val'].keys())},
+            'test': {key: len(self.datasets['test'][key]) for key in list(self.datasets['test'].keys())}}
         self.label_set = self.get_label_set()
         self.data_length = {name: np.sum([len(self.datasets[name][key])
                                           for key in self.datasets[name]]) for name in self.datasets.keys()}
@@ -589,5 +589,5 @@ class MetaLearningSystemDataLoader(object):
         output_sample = []
         for key in sample.keys():
             _temp = np.array(sample[key].numpy(), dtype=np.float32)
-            output_sample.append(np.reshape(_temp, newshape=(num_gpus, samples_per_iter, batch_size)+_temp.shape[1:]))
+            output_sample.append(np.reshape(_temp, newshape=(num_gpus, samples_per_iter, batch_size) + _temp.shape[1:]))
         return output_sample

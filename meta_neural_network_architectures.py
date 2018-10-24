@@ -101,6 +101,7 @@ class MetaConv2dLayer(nn.Module):
                        padding=self.padding, dilation=1, groups=1)
         return out
 
+
 class MetaLinearLayer(nn.Module):
     def __init__(self, input_shape, num_filters, use_bias):
         """
@@ -143,6 +144,7 @@ class MetaLinearLayer(nn.Module):
                 bias = None
         out = F.linear(input=x, weight=weight, bias=bias)
         return out
+
 
 class MetaBatchNormLayer(nn.Module):
     def __init__(self, num_features, device, args, eps=1e-5, momentum=0.1, affine=True,
@@ -318,7 +320,8 @@ class MetaLayerNormLayer(nn.Module):
 
 
 class MetaConvReLUNormLayer(nn.Module):
-    def __init__(self, input_shape, num_filters, kernel_size, stride, padding, use_bias, args, device, normalization=True,
+    def __init__(self, input_shape, num_filters, kernel_size, stride, padding, use_bias, args, device,
+                 normalization=True,
                  meta_layer=True):
         """
         Initializes a Conv->BatchNorm->ReLU layer which applies those operation in that order.
@@ -346,7 +349,6 @@ class MetaConvReLUNormLayer(nn.Module):
             elif args.norm_layer == "layer_norm":
                 input_shape_list = list(input_shape)
                 input_shape_list[1] = num_filters
-                b, c, h, w = input_shape
                 input_shape_list[2] = int(np.ceil(input_shape_list[2] / stride))
                 input_shape_list[3] = int(np.ceil(input_shape_list[3] / stride))
                 self.norm_layer = MetaLayerNormLayer(input_feature_shape=input_shape_list[1:])
@@ -415,9 +417,8 @@ class MetaNormLayerConvReLU(nn.Module):
         self.meta_layer = meta_layer
         self.no_bn_learnable_params = no_bn_learnable_params
         self.device = device
-        print('use_per_step_bn_stats', self.use_per_step_bn_statistics)
+        self.layer_dict = nn.ModuleDict()
         self.build_block()
-
 
     def build_block(self):
 
@@ -428,18 +429,19 @@ class MetaNormLayerConvReLU(nn.Module):
             if self.args.norm_layer == "batch_norm":
                 self.norm_layer = MetaBatchNormLayer(self.input_shape[1], track_running_stats=True,
                                                      meta_batch_norm=self.meta_layer,
-                                                     no_learnable_params=self.no_bn_learnable_params, device=self.device,
+                                                     no_learnable_params=self.no_bn_learnable_params,
+                                                     device=self.device,
                                                      use_per_step_bn_statistics=self.use_per_step_bn_statistics,
                                                      args=self.args)
             elif self.args.norm_layer == "layer_norm":
                 self.norm_layer = MetaLayerNormLayer(input_feature_shape=out.shape[1:])
 
             out = self.norm_layer(out, num_step=0)
-        self.conv = MetaConv2dLayer(in_channels=out.shape[1], out_channels=self.num_filters, kernel_size=self.kernel_size,
+        self.conv = MetaConv2dLayer(in_channels=out.shape[1], out_channels=self.num_filters,
+                                    kernel_size=self.kernel_size,
                                     stride=self.stride, padding=self.padding, use_bias=self.use_bias)
         out = F.leaky_relu(self.conv(out))
         print(out.shape)
-
 
     def forward(self, x, num_step, params=None, training=False, backup_running_statistics=False):
         """
@@ -466,16 +468,15 @@ class MetaNormLayerConvReLU(nn.Module):
         else:
             conv_params = None
 
+        out = x
+
         if self.normalization:
-            out = self.norm_layer.forward(x, num_step=num_step,
+            out = self.norm_layer.forward(out, num_step=num_step,
                                           params=batch_norm_params, training=training,
                                           backup_running_statistics=backup_running_statistics)
 
-            out = self.conv.forward(out, conv_params)
-            out = F.leaky_relu(out)
-        else:
-            out = F.leaky_relu(x)
-            out = self.conv(out, params=conv_params)
+        out = self.conv(out, params=conv_params)
+        out = F.leaky_relu(out)
 
         return out
 
@@ -591,9 +592,8 @@ class VGGLeakyReLUNormNetwork(nn.Module):
             for key, item in key_exists.items():
                 temp_current_dictionary[key] = item
 
-
         for idx, key in enumerate(depth_keys[::-1]):
-            if idx>0:
+            if idx > 0:
                 temp_current_dictionary[key] = temp_current_dictionary
 
         return temp_current_dictionary
