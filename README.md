@@ -1,11 +1,11 @@
 # How to train your MAML in Pytorch
-The original code for the paper "How to train your MAML" arxiv URL along with a replication of the original MAML system.
+The original code for the paper ["How to train your MAML"](https://arxiv.org/abs/1810.09502), along with a replication of the original ["Model Agnostic Meta Learning"](https://arxiv.org/abs/1703.03400) (MAML) paper.
 
 ## Introduction
 
-Welcome to the code repository of How to train your MAML arxiv_url. This repository includes code for training both MAML
+Welcome to the code repository of [How to train your MAML](https://arxiv.org/abs/1810.09502). This repository includes code for training both MAML
 and MAML++ models, as well as data providers and the datasets for both. By using this codebase you agree to the terms 
-and conditions in the LICENSE file.
+and conditions in the [LICENSE](https://github.com/AntreasAntoniou/HowToTrainYourMAMLPytorch/blob/master/LICENSE) file. If you choose to use the Mini-Imagenet dataset, you must abide by the terms and conditions in the [ImageNet LICENSE](https://github.com/AntreasAntoniou/HowToTrainYourMAMLPytorch/blob/master/imagenet_license.md)
 
 ## Installation
 
