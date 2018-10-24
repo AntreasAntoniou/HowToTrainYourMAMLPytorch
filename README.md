@@ -1,5 +1,5 @@
 # How to train your MAML in Pytorch
-The original code for the paper "How to train your MAML" arxiv URL along with a replication of the original MAML system.
+The original code for the paper ["How to train your MAML"](https://arxiv.org/abs/1810.09502), along with a replication of the original ["Model Agnostic Meta Learning"](https://arxiv.org/abs/1703.03400) (MAML) paper.
 
 ## Introduction
 
