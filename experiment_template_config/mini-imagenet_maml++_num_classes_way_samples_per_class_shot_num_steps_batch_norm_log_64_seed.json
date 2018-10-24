@@ -15,7 +15,7 @@
   "sets_are_pre_split": true,
   "train_val_test_split": [0.64, 0.16, 0.20],
 
-  "total_epochs": 150,
+  "total_epochs": 250,
   "total_iter_per_epoch":500, "continue_from_epoch": -2,
 
   "max_pooling": true,
@@ -24,9 +24,9 @@
 
   "dropout_rate_value":0.0,
   "min_learning_rate":0.00001,
-  "meta_learning_rate":0.001,   "total_epochs_before_pause": 150,
+  "meta_learning_rate":0.001,   "total_epochs_before_pause": 250,
   "task_learning_rate":-1,
-  "first_order_to_second_order_epoch":10,
+  "first_order_to_second_order_epoch":-1,
 
   "norm_layer":"batch_norm",
   "cnn_num_filters":32,

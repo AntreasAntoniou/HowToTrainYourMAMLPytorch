@@ -15,7 +15,7 @@
   "indexes_of_folders_indicating_class": [-3, -2],
   "sets_are_pre_split": false,
 
-  "total_epochs": 150,
+  "total_epochs": 250,
   "total_iter_per_epoch":500, "continue_from_epoch": -2,
 
   "max_pooling": false,
@@ -24,10 +24,10 @@
 
   "dropout_rate_value":0.0,
   "min_learning_rate":0.00001,
-  "meta_learning_rate":0.001,   "total_epochs_before_pause": 150,
+  "meta_learning_rate":0.001,   "total_epochs_before_pause": 250,
   "task_learning_rate":-1,
   "init_task_learning_rate":0.1,
-  "first_order_to_second_order_epoch":80,
+  "first_order_to_second_order_epoch":-1,
 
   "norm_layer":"batch_norm",
   "cnn_num_filters":64,
