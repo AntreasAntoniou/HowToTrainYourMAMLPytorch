@@ -191,7 +191,7 @@ what to fill those with.
       "num_target_samples": $target_samples_per_class$,
     
       "second_order": true,
-      "optimize_final_target_loss_only":false,
+      "use_multi_step_loss_optimization":true,
       "use_gdrive":false
     }
     

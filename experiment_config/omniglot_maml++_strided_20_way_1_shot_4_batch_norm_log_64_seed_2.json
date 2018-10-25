@@ -40,6 +40,6 @@
   "num_target_samples": 1,
 
   "second_order": true,
-  "optimize_final_target_loss_only":false,
+  "multi_step_loss_optimization":true,
   "use_gdrive":false
 }

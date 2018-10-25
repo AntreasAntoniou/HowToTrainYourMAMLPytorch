@@ -218,20 +218,20 @@ class MAMLFewShotClassifier(nn.Module):
                                                                   use_second_order=use_second_order,
                                                                   current_step_idx=num_step)
 
-                if not use_multi_step_loss_optimization:
-                    if num_step == (self.args.number_of_training_steps_per_iter - 1):
-                        target_loss, target_preds = self.net_forward(x=x_target_set_task,
-                                                                     y=y_target_set_task, weights=names_weights_copy,
-                                                                     backup_running_statistics=False, training=True,
-                                                                     num_step=num_step)
-                        task_losses.append(target_loss)
-                else:
+                if use_multi_step_loss_optimization:
                     target_loss, target_preds = self.net_forward(x=x_target_set_task,
                                                                  y=y_target_set_task, weights=names_weights_copy,
                                                                  backup_running_statistics=False, training=True,
                                                                  num_step=num_step)
 
                     task_losses.append(per_step_loss_importance_vectors[num_step] * target_loss)
+                else:
+                    if num_step == (self.args.number_of_training_steps_per_iter - 1):
+                        target_loss, target_preds = self.net_forward(x=x_target_set_task,
+                                                                     y=y_target_set_task, weights=names_weights_copy,
+                                                                     backup_running_statistics=False, training=True,
+                                                                     num_step=num_step)
+                        task_losses.append(target_loss)
 
 
             _, predicted = torch.max(target_preds.data, 1)
@@ -297,7 +297,7 @@ class MAMLFewShotClassifier(nn.Module):
         """
         losses = self.forward(data_batch=data_batch, epoch=epoch, use_second_order=self.args.second_order and
                                                                                    epoch > self.args.first_order_to_second_order_epoch,
-                              use_multi_step_loss_optimization=self.args.optimize_final_target_loss_only,
+                              use_multi_step_loss_optimization=self.args.use_multi_step_loss_optimization,
                               num_steps=self.args.number_of_training_steps_per_iter, training_phase=True)
         return losses
 
