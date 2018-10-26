@@ -39,6 +39,6 @@
   "num_target_samples": $target_samples_per_class$,
 
   "second_order": true,
-  "multi_step_loss_optimization":true,
+  "use_multi_step_loss_optimization":true,
   "use_gdrive":false
 }
