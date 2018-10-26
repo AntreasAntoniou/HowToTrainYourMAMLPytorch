@@ -36,7 +36,7 @@ class torch_rotate_image(object):
         self.channels = channels
 
     def __call__(self, image):
-        rotate = transforms.RandomRotation(degrees=self.k)
+        rotate = transforms.RandomRotation(degrees=self.k*90)
         if image.shape[-1] == 1:
             image = image[:, :, 0]
         image = Image.fromarray(image)
@@ -417,7 +417,7 @@ class FewShotLearningDatasetParallel(Dataset):
         selected_classes = rng.choice(list(self.dataset_size_dict[dataset_name].keys()),
                                       size=self.num_classes_per_set, replace=False)
         rng.shuffle(selected_classes)
-        k_list = rng.randint(0, 3, size=self.num_classes_per_set)
+        k_list = rng.randint(0, 4, size=self.num_classes_per_set)
         k_dict = {selected_class: k_item for (selected_class, k_item) in zip(selected_classes, k_list)}
         episode_labels = [i for i in range(self.num_classes_per_set)]
         class_to_episode_label = {selected_class: episode_label for (selected_class, episode_label) in
@@ -435,7 +435,7 @@ class FewShotLearningDatasetParallel(Dataset):
                 choose_samples = self.datasets[dataset_name][class_entry][sample]
                 x_class_data = self.load_batch([choose_samples])[0]
                 k = k_dict[class_entry]
-                x_class_data = augment_image(image=x_class_data, k=k * 90,
+                x_class_data = augment_image(image=x_class_data, k=k,
                                              channels=self.image_channel, augment_bool=augment_images,
                                              dataset_name=self.dataset_name, args=self.args)
                 class_image_samples.append(x_class_data)
