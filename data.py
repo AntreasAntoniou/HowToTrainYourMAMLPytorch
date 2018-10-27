@@ -36,7 +36,7 @@ class torch_rotate_image(object):
         self.channels = channels
 
     def __call__(self, image):
-        rotate = transforms.RandomRotation(degrees=self.k)
+        rotate = transforms.RandomRotation(degrees=self.k*90)
         if image.shape[-1] == 1:
             image = image[:, :, 0]
         image = Image.fromarray(image)
