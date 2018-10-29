@@ -6,6 +6,31 @@ import torch.nn.functional as F
 import torch
 import numpy as np
 
+def extract_top_level_dict(current_dict):
+    """
+    Builds a graph dictionary from the passed depth_keys, value pair. Useful for dynamically passing external params
+    :param depth_keys: A list of strings making up the name of a variable. Used to make a graph for that params tree.
+    :param value: Param value
+    :param key_exists: If none then assume new dict, else load existing dict and add new key->value pairs to it.
+    :return: A dictionary graph of the params already added to the graph.
+    """
+    output_dict = dict()
+    for key in current_dict.keys():
+        name = key.replace("layer_dict.", "")
+        top_level = name.split(".")[0]
+        sub_level = ".".join(name.split(".")[1:])
+
+        if top_level not in output_dict:
+            if sub_level == "":
+                output_dict[top_level] = current_dict[key]
+            else:
+                output_dict[top_level] = {sub_level: current_dict[key]}
+        else:
+            new_item = {key: value for key, value in output_dict[top_level].items()}
+            new_item[sub_level] = current_dict[key]
+            output_dict[top_level] = new_item
+
+    return output_dict
 
 class BatchNormReLUConv(nn.Module):
     def __init__(self, input_shape, num_filters, kernel_size, stride, padding, use_bias):
@@ -84,7 +109,7 @@ class MetaConv2dLayer(nn.Module):
         :return: The output of a convolutional function.
         """
         if params is not None:
-
+            params = extract_top_level_dict(params)
             if self.use_bias:
                 (weight, bias) = params["weight"], params["bias"]
             else:
@@ -131,6 +156,7 @@ class MetaLinearLayer(nn.Module):
         :return: The result of the linear function.
         """
         if params is not None:
+            params = extract_top_level_dict(params)
             if self.use_bias:
                 (weight, bias) = params["weights"], params["bias"]
             else:
@@ -220,6 +246,7 @@ class MetaBatchNormLayer(nn.Module):
         :return: The result of the batch norm operation.
         """
         if params is not None:
+            params = extract_top_level_dict(params)
             (weight, bias) = params["weight"], params["bias"]
         else:
             weight, bias = self.weight, self.bias
@@ -304,6 +331,7 @@ class MetaLayerNormLayer(nn.Module):
             :return: The result of the batch norm operation.
         """
         if params is not None:
+            params = extract_top_level_dict(params)
             bias = params["bias"]
         else:
             bias = self.bias
@@ -369,7 +397,7 @@ class MetaConvReLUNormLayer(nn.Module):
         batch_norm_params = None
 
         if params is not None:
-
+            params = extract_top_level_dict(params)
             if self.normalization:
                 if 'norm_layer' in params:
                     batch_norm_params = params['norm_layer']
@@ -459,7 +487,7 @@ class MetaNormLayerConvReLU(nn.Module):
         batch_norm_params = None
 
         if params is not None:
-
+            params = extract_top_level_dict(params)
             if self.normalization:
                 if 'norm_layer' in params:
                     batch_norm_params = params['norm_layer']
@@ -613,13 +641,7 @@ class VGGLeakyReLUNormNetwork(nn.Module):
         param_dict = dict()
 
         if params is not None:
-            for name, param in params.items():
-                path_bits = name.split(".")
-                if path_bits[1] not in param_dict:
-                    param_dict[path_bits[1]] = self.create_new_nested_dictionary(depth_keys=path_bits[2:], value=param)
-                else:
-                    param_dict[path_bits[1]] = self.create_new_nested_dictionary(depth_keys=path_bits[2:], value=param,
-                                                                                 key_exists=param_dict[path_bits[1]])
+            param_dict = extract_top_level_dict(params)
 
         for name, param in self.layer_dict.named_parameters():
             path_bits = name.split(".")
