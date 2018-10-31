@@ -50,7 +50,7 @@ class BatchNormReLUConv(nn.Module):
         self.stride = stride
         self.kernel_size = kernel_size
         self.num_filters = num_filters
-
+        self.use_bias = use_bias
         self.build_block()
 
     def build_block(self):
