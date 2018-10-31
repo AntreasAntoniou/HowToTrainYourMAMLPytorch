@@ -32,6 +32,7 @@ class ExperimentBuilder(object):
         self.max_models_to_save = self.args.max_models_to_save
         self.create_summary_csv = False
 
+
         if self.args.continue_from_epoch == 'from_scratch':
             self.create_summary_csv = True
 
@@ -52,6 +53,7 @@ class ExperimentBuilder(object):
                 self.model.load_model(model_save_dir=self.saved_models_filepath, model_name="train_model",
                                       model_idx=self.args.continue_from_epoch)
             self.start_epoch = int(self.state['current_iter'] / self.args.total_iter_per_epoch)
+
 
         self.data = data(args=args, current_iter=self.state['current_iter'])
 
@@ -138,7 +140,7 @@ class ExperimentBuilder(object):
 
         return train_losses, total_losses, current_iter
 
-    def evaluation_iteration(self, val_sample, total_losses, pbar_val, phase='val'):
+    def evaluation_iteration(self, val_sample, total_losses, pbar_val, phase):
         """
         Runs a validation iteration, updates the progress bar and returns the total and current epoch val losses.
         :param val_sample: A sample from the data provider
@@ -161,7 +163,7 @@ class ExperimentBuilder(object):
         val_output_update = self.build_loss_summary_string(losses)
 
         pbar_val.update(1)
-        pbar_val.set_description("val_phase {} -> {}".format(self.epoch, val_output_update))
+        pbar_val.set_description("{}_phase {} -> {}".format(phase, self.epoch, val_output_update))
 
         return val_losses, total_losses
 
@@ -247,7 +249,7 @@ class ExperimentBuilder(object):
                                                               augment_images=False)):
                                 val_losses, total_losses = self.evaluation_iteration(val_sample=val_sample,
                                                                                      total_losses=total_losses,
-                                                                                     pbar_val=pbar_val)
+                                                                                     pbar_val=pbar_val, phase='val')
 
                             if val_losses["val_accuracy_mean"] > self.state['best_val_acc']:
                                 print("Best validation accuracy", val_losses["val_accuracy_mean"])
@@ -280,12 +282,11 @@ class ExperimentBuilder(object):
                                                                    augment_images=False)):
                                     test_losses, total_losses = self.evaluation_iteration(val_sample=test_sample,
                                                                                           total_losses=total_losses,
-                                                                                          pbar_val=pbar_test,
-                                                                                          phase='test')
+                                                                                          pbar_val=pbar_test, phase='test')
 
                             _ = save_statistics(self.logs_filepath,
-                                                list(test_losses.keys()),
-                                                create=True, filename="test_summary.csv")
+                                                                          list(test_losses.keys()),
+                                                                          create=True, filename="test_summary.csv")
                             summary_statistics_filepath = save_statistics(self.logs_filepath,
                                                                           list(test_losses.values()),
                                                                           create=False, filename="test_summary.csv")
