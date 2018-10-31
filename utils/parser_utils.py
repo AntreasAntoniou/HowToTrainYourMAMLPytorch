@@ -4,7 +4,7 @@ import torch
 import json
 
 def get_args():
-    parser = argparse.ArgumentParser(description='Welcome to the DAGAN training and inference system')
+    parser = argparse.ArgumentParser(description='Welcome to the MAML++ training and inference system')
 
     parser.add_argument('--batch_size', nargs="?", type=int, default=32, help='Batch_size for experiment')
     parser.add_argument('--image_height', nargs="?", type=int, default=28)
