@@ -384,9 +384,9 @@ class MAMLFewShotClassifier(nn.Module):
 
         losses = self.evaluation_forward_prop(data_batch=data_batch, epoch=self.current_epoch)
 
-        losses['loss'].backward()
-        self.zero_grad()
-        self.optimizer.zero_grad()
+        # losses['loss'].backward() # uncomment if you get the weird memory error
+        # self.zero_grad()
+        # self.optimizer.zero_grad()
 
         return losses
 
