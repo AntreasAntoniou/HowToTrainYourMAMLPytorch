@@ -1,10 +1,14 @@
-import copy
 import numbers
 from collections import OrderedDict
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
 import numpy as np
+from torch.autograd import Function
+from torch.optim import Adam
+
+from utils.parser_utils import get_args
+
 
 def extract_top_level_dict(current_dict):
     """
@@ -32,51 +36,9 @@ def extract_top_level_dict(current_dict):
 
     return output_dict
 
-class BatchNormReLUConv(nn.Module):
-    def __init__(self, input_shape, num_filters, kernel_size, stride, padding, use_bias):
-        """
-        Initializes a BatchNorm->ReLU->Conv layer which applies those operation in that order.
-        :param input_shape: The image input shape in the form (b, c, h, w)
-        :param num_filters: number of filters for convolutional layer
-        :param kernel_size: the kernel size of the convolutional layer
-        :param stride: the stride of the convolutional layer
-        :param padding: the bias of the convolutional layer
-        :param use_bias: whether the convolutional layer utilizes a bias
-        """
-        super(BatchNormReLUConv, self).__init__()
-
-        self.input_shape = input_shape
-        self.padding = padding
-        self.stride = stride
-        self.kernel_size = kernel_size
-        self.num_filters = num_filters
-        self.use_bias = use_bias
-        self.build_block()
-
-    def build_block(self):
-        x = torch.zeros(self.input_shape)
-        out = x
-        self.bn = nn.BatchNorm2d(out.shape[1], track_running_stats=True)
-        out = self.bn(out)
-        out = F.leaky_relu(out)
-        self.conv = MetaConv2dLayer(in_channels=out.shape[1], out_channels=self.num_filters,
-                                    kernel_size=self.kernel_size, stride=self.stride, padding=self.padding,
-                                    use_bias=self.use_bias)
-        out = self.conv(out)
-        print("BatchNormReLUConv block is buiilt", out.shape)
-
-    def forward(self, x):
-        """
-        Forward props by applying a batch norm function followed by a ReLU non linear function followed by a conv layer
-        :param x: Input data batch.
-        :return: Output of layer
-        """
-        out = self.conv(F.leaky_relu(self.bn(x)))
-        return out
-
 
 class MetaConv2dLayer(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, use_bias):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, use_bias, dilation_rate=1):
         """
         A MetaConv2D layer. Applies the same functionality of a standard Conv2D layer with the added functionality of
         being able to receive a parameter dictionary at the forward pass which allows the convolution to use external
@@ -91,8 +53,9 @@ class MetaConv2dLayer(nn.Module):
         """
         super(MetaConv2dLayer, self).__init__()
         num_filters = out_channels
-        self.stride = stride
-        self.padding = padding
+        self.stride = int(stride)
+        self.padding = int(padding)
+        self.dilation_rate = int(dilation_rate)
         self.use_bias = use_bias
         self.weight = nn.Parameter(torch.empty(num_filters, in_channels, kernel_size, kernel_size))
         nn.init.xavier_normal_(self.weight)
@@ -109,7 +72,7 @@ class MetaConv2dLayer(nn.Module):
         :return: The output of a convolutional function.
         """
         if params is not None:
-            params = extract_top_level_dict(params)
+            params = extract_top_level_dict(current_dict=params)
             if self.use_bias:
                 (weight, bias) = params["weight"], params["bias"]
             else:
@@ -123,7 +86,7 @@ class MetaConv2dLayer(nn.Module):
                 bias = None
 
         out = F.conv2d(input=x, weight=weight, bias=bias, stride=self.stride,
-                       padding=self.padding, dilation=1, groups=1)
+                       padding=self.padding, dilation=self.dilation_rate, groups=1)
         return out
 
 
@@ -140,6 +103,7 @@ class MetaLinearLayer(nn.Module):
         """
         super(MetaLinearLayer, self).__init__()
         b, c = input_shape
+        # print('input_shape', input_shape, b, c, num_filters)
         self.use_bias = use_bias
         self.weights = nn.Parameter(torch.empty(num_filters, c))
         nn.init.normal(self.weights)
@@ -156,7 +120,7 @@ class MetaLinearLayer(nn.Module):
         :return: The result of the linear function.
         """
         if params is not None:
-            params = extract_top_level_dict(params)
+            params = extract_top_level_dict(current_dict=params)
             if self.use_bias:
                 (weight, bias) = params["weights"], params["bias"]
             else:
@@ -168,6 +132,7 @@ class MetaLinearLayer(nn.Module):
             else:
                 weight = self.weights
                 bias = None
+        # print(x.shape)
         out = F.linear(input=x, weight=weight, bias=bias)
         return out
 
@@ -246,7 +211,7 @@ class MetaBatchNormLayer(nn.Module):
         :return: The result of the batch norm operation.
         """
         if params is not None:
-            params = extract_top_level_dict(params)
+            params = extract_top_level_dict(current_dict=params)
             (weight, bias) = params["weight"], params["bias"]
         else:
             weight, bias = self.weight, self.bias
@@ -331,7 +296,7 @@ class MetaLayerNormLayer(nn.Module):
             :return: The result of the batch norm operation.
         """
         if params is not None:
-            params = extract_top_level_dict(params)
+            params = extract_top_level_dict(current_dict=params)
             bias = params["bias"]
         else:
             bias = self.bias
@@ -345,74 +310,6 @@ class MetaLayerNormLayer(nn.Module):
     def extra_repr(self):
         return '{normalized_shape}, eps={eps}, ' \
                'elementwise_affine={elementwise_affine}'.format(**self.__dict__)
-
-
-class MetaConvReLUNormLayer(nn.Module):
-    def __init__(self, input_shape, num_filters, kernel_size, stride, padding, use_bias, args, device,
-                 normalization=True,
-                 meta_layer=True):
-        """
-        Initializes a Conv->BatchNorm->ReLU layer which applies those operation in that order.
-        :param args: A named tuple containing the system's hyperparameters.
-        :param device: The device to run the layer on.
-        :param normalization: The type of normalization to use 'batch_norm' or 'layer_norm'
-        :param meta_layer: Whether this layer will require meta-layer capabilities such as meta-batch norm, meta-conv
-        etc.
-        :param input_shape: The image input shape in the form (b, c, h, w)
-        :param num_filters: number of filters for convolutional layer
-        :param kernel_size: the kernel size of the convolutional layer
-        :param stride: the stride of the convolutional layer
-        :param padding: the bias of the convolutional layer
-        :param use_bias: whether the convolutional layer utilizes a bias
-        """
-        super(MetaConvReLUNormLayer, self).__init__()
-        self.meta_layer = meta_layer
-        self.normalization = normalization
-        self.conv = MetaConv2dLayer(in_channels=input_shape[1], out_channels=num_filters, kernel_size=kernel_size,
-                                    stride=stride, padding=padding, use_bias=use_bias)
-        if normalization:
-            if args.norm_layer == "batch_norm":
-                self.norm_layer = MetaBatchNormLayer(num_filters, track_running_stats=True,
-                                                     meta_batch_norm=self.meta_layer, args=args, device=device)
-            elif args.norm_layer == "layer_norm":
-                input_shape_list = list(input_shape)
-                input_shape_list[1] = num_filters
-                input_shape_list[2] = int(np.ceil(input_shape_list[2] / stride))
-                input_shape_list[3] = int(np.ceil(input_shape_list[3] / stride))
-                self.norm_layer = MetaLayerNormLayer(input_feature_shape=input_shape_list[1:])
-
-    def forward(self, x, num_step, params=None, training=False, backup_running_statistics=False):
-        """
-            Forward propagates by applying a the layer functions. If params are none then internal params are used.
-            Otherwise passed params will be used to execute the function.
-            :param input: input data batch, size either can be any.
-            :param num_step: The current inner loop step being taken. This is used when we are learning per step params and
-             collecting per step batch statistics. It indexes the correct object to use for the current time-step
-            :param params: A dictionary containing 'weight' and 'bias'.
-            :param training: Whether this is currently the training or evaluation phase.
-            :param backup_running_statistics: Whether to backup the running statistics. This is used
-            at evaluation time, when after the pass is complete we want to throw away the collected validation stats.
-            :return: The result of the batch norm operation.
-        """
-        batch_norm_params = None
-
-        if params is not None:
-            params = extract_top_level_dict(params)
-            if self.normalization:
-                if 'norm_layer' in params:
-                    batch_norm_params = params['norm_layer']
-
-            conv_params = params['conv']
-        else:
-            conv_params = None
-
-        if self.normalization:
-            out = self.norm_layer.forward(F.leaky_relu(self.conv.forward(x, conv_params)),
-                                          params=batch_norm_params, training=training,
-                                          backup_running_statistics=backup_running_statistics, num_step=num_step)
-        else:
-            out = F.leaky_relu(self.conv(x, params=conv_params))
-        return out
 
 
 class MetaNormLayerConvReLU(nn.Module):
@@ -464,11 +361,16 @@ class MetaNormLayerConvReLU(nn.Module):
             elif self.args.norm_layer == "layer_norm":
                 self.norm_layer = MetaLayerNormLayer(input_feature_shape=out.shape[1:])
 
-            out = self.norm_layer(out, num_step=0)
+            out = self.norm_layer.forward(out, num_step=0)
         self.conv = MetaConv2dLayer(in_channels=out.shape[1], out_channels=self.num_filters,
                                     kernel_size=self.kernel_size,
                                     stride=self.stride, padding=self.padding, use_bias=self.use_bias)
-        out = F.leaky_relu(self.conv(out))
+
+
+        self.layer_dict['activation_function_pre'] = nn.LeakyReLU()
+
+
+        out = self.layer_dict['activation_function_pre'].forward(self.conv.forward(out))
         print(out.shape)
 
     def forward(self, x, num_step, params=None, training=False, backup_running_statistics=False):
@@ -487,7 +389,8 @@ class MetaNormLayerConvReLU(nn.Module):
         batch_norm_params = None
 
         if params is not None:
-            params = extract_top_level_dict(params)
+            params = extract_top_level_dict(current_dict=params)
+
             if self.normalization:
                 if 'norm_layer' in params:
                     batch_norm_params = params['norm_layer']
@@ -503,8 +406,8 @@ class MetaNormLayerConvReLU(nn.Module):
                                           params=batch_norm_params, training=training,
                                           backup_running_statistics=backup_running_statistics)
 
-        out = self.conv(out, params=conv_params)
-        out = F.leaky_relu(out)
+        out = self.conv.forward(out, params=conv_params)
+        out = self.layer_dict['activation_function_pre'].forward(out)
 
         return out
 
@@ -589,42 +492,23 @@ class VGGLeakyReLUNormNetwork(nn.Module):
             self.layer_dict['fc_norm_layer'] = MetaLayerNormLayer(input_feature_shape=input_shape_list[1:])
             out = self.layer_dict['fc_norm_layer'](out, num_step=0)
 
-        out = F.leaky_relu(out)
+
+        self.layer_dict['activation_function_pre'] = nn.LeakyReLU()
+
+
+        out = self.layer_dict['activation_function_pre'].forward(out)
 
         if not self.args.max_pooling:
             out = F.avg_pool2d(out, out.shape[2])
 
-        self.layer_dict['linear'] = MetaLinearLayer(input_shape=(out.shape[0], np.prod(out.shape[1:])),
-                                                    num_filters=self.num_output_classes, use_bias=True)
-
         self.encoder_features_shape = list(out.shape)
         out = out.view(out.shape[0], -1)
 
+        self.layer_dict['linear'] = MetaLinearLayer(input_shape=(out.shape[0], np.prod(out.shape[1:])),
+                                                    num_filters=self.num_output_classes, use_bias=True)
+
         out = self.layer_dict['linear'](out)
         print("VGGNetwork build", out.shape)
-
-    def create_new_nested_dictionary(self, depth_keys, value, key_exists=None):
-        """
-        Builds a graph dictionary from the passed depth_keys, value pair. Useful for dynamically passing external params
-        :param depth_keys: A list of strings making up the name of a variable. Used to make a graph for that params tree.
-        :param value: Param value
-        :param key_exists: If none then assume new dict, else load existing dict and add new key->value pairs to it.
-        :return: A dictionary graph of the params already added to the graph.
-        """
-        temp_current_dictionary = {depth_keys[-1]: value}
-
-        if key_exists is not None:
-            for idx, key in enumerate(depth_keys[:-1]):
-                key_exists = key_exists[key]
-
-            for key, item in key_exists.items():
-                temp_current_dictionary[key] = item
-
-        for idx, key in enumerate(depth_keys[::-1]):
-            if idx > 0:
-                temp_current_dictionary[key] = temp_current_dictionary
-
-        return temp_current_dictionary
 
     def forward(self, x, num_step, params=None, training=False, backup_running_statistics=False):
         """
@@ -641,8 +525,9 @@ class VGGLeakyReLUNormNetwork(nn.Module):
         param_dict = dict()
 
         if params is not None:
-            param_dict = extract_top_level_dict(params)
+            param_dict = extract_top_level_dict(current_dict=params)
 
+        # print('top network', param_dict.keys())
         for name, param in self.layer_dict.named_parameters():
             path_bits = name.split(".")
             layer_name = path_bits[0]
@@ -667,7 +552,7 @@ class VGGLeakyReLUNormNetwork(nn.Module):
             out = self.layer_dict['fc_norm_layer'](out, param_dict['fc_norm_layer'], training=training,
                                                    num_step=num_step)
 
-        out = F.leaky_relu(out)
+        out = self.layer_dict['activation_function_pre'].forward(out)
 
         if not self.args.max_pooling:
             out = F.avg_pool2d(out, out.shape[2])

@@ -54,6 +54,7 @@ class MAMLFewShotClassifier(nn.Module):
                                                   args=args, device=device, meta_classifier=True).to(device=self.device)
         self.task_learning_rate = args.task_learning_rate
 
+
         if self.task_learning_rate == -1:
             names_weights_copy = self.get_inner_loop_parameter_dict(self.classifier.named_parameters())
             self.task_learning_rate = nn.Parameter(
@@ -206,6 +207,7 @@ class MAMLFewShotClassifier(nn.Module):
             y_target_set_task = y_target_set_task.view(-1)
 
             for num_step in range(num_steps):
+
                 support_loss, support_preds = self.net_forward(x=x_support_set_task,
                                                                y=y_support_set_task,
                                                                weights=names_weights_copy,
@@ -366,6 +368,8 @@ class MAMLFewShotClassifier(nn.Module):
         :param epoch: the index of the current epoch
         :return: The losses of the ran iteration.
         """
+
+
         if self.training:
             self.eval()
 
@@ -380,6 +384,7 @@ class MAMLFewShotClassifier(nn.Module):
 
         losses = self.evaluation_forward_prop(data_batch=data_batch, epoch=self.current_epoch)
 
+        losses['loss'].backward()
         self.zero_grad()
         self.optimizer.zero_grad()
 
