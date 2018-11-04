@@ -31,22 +31,17 @@ def get_args():
     parser.add_argument('--dropout_rate_value', type=float, default=0.3, help='Dropout_rate_value')
     parser.add_argument('--num_target_samples', type=int, default=15, help='Dropout_rate_value')
     parser.add_argument('--second_order', type=str, default="False", help='Dropout_rate_value')
-    parser.add_argument('--hypernetwork_scale', type=float, default=1.0, help='Dropout_rate_value')
-    # parser.add_argument('--first_order_to_second_order', type=int, default=40, help='Dropout_rate_value')
     parser.add_argument('--total_epochs', type=int, default=200, help='Number of epochs per experiment')
     parser.add_argument('--total_iter_per_epoch', type=int, default=500, help='Number of iters per epoch')
     parser.add_argument('--min_learning_rate', type=float, default=0.00001, help='Min learning rate')
     parser.add_argument('--meta_learning_rate', type=float, default=0.001, help='Learning rate of overall MAML system')
     parser.add_argument('--meta_opt_bn', type=str, default="False")
     parser.add_argument('--task_learning_rate', type=float, default=0.1, help='Learning rate per task gradient step')
-    parser.add_argument('--full_context_unroll_k', type=int, default=5, help='Unroll levels K for attLSTM, used only'
-                                                                             ' when use_full_context_embeddings is set'
-                                                                             ' to True')
+    
     parser.add_argument('--norm_layer', type=str, default="batch_norm")
     parser.add_argument('--max_pooling', type=str, default="False")
     parser.add_argument('--per_step_bn_statistics', type=str, default="False")
     parser.add_argument('--num_classes_per_set', type=int, default=20, help='Number of classes to sample per set')
-    parser.add_argument('--use_gdrive', type=str, default="False", help='Number of classes to sample per set')
     parser.add_argument('--cnn_num_blocks', type=int, default=4, help='Number of classes to sample per set')
     parser.add_argument('--number_of_training_steps_per_iter', type=int, default=1, help='Number of classes to sample per set')
     parser.add_argument('--number_of_evaluation_steps_per_iter', type=int, default=1, help='Number of classes to sample per set')
@@ -54,20 +49,7 @@ def get_args():
     parser.add_argument('--cnn_blocks_per_stage', type=int, default=1,
                         help='Number of classes to sample per set')
     parser.add_argument('--num_samples_per_class', type=int, default=1, help='Number of samples per set to sample')
-    parser.add_argument('--use_full_context_embeddings', type=str, default="False", help="Whether to use full context "
-                                                                                         "embeddings (i.e. bidirLSTM "
-                                                                                         "for g_embed and attLSTM for "
-                                                                                         "f_embed)")
-    parser.add_argument('--grad_penalty', type=str, default="False", help="Whether to take the mean of"
-                                                                                           "the CNN embeddings "
-                                                                                           "classwise (i.e. produce one"
-                                                                                           " embedding per class, "
-                                                                                           "similar to prototypical"
-                                                                                           " networks paper)")
-    parser.add_argument('--name_of_args_json_file', type=str, default="None", help="Whether to use full context "
-                                                                                    "embeddings (i.e. bidirLSTM "
-                                                                                    "for g_embed and attLSTM for "
-                                                                                    "f_embed)")
+    parser.add_argument('--name_of_args_json_file', type=str, default="None")
 
     args = parser.parse_args()
     args_dict = vars(args)
