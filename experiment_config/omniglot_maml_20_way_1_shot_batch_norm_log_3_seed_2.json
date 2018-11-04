@@ -14,6 +14,7 @@
   "train_val_test_split": [0.70918052988, 0.03080714725, 0.2606284658],
   "indexes_of_folders_indicating_class": [-3, -2],
   "sets_are_pre_split": false,
+  "total_unique_tasks": 2000000,
 
   "total_epochs": 250,
   "total_iter_per_epoch":500, "continue_from_epoch": -2,

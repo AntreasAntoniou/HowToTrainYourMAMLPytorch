@@ -412,6 +412,7 @@ class FewShotLearningDatasetParallel(Dataset):
         :param set_name: The name of the set to use, e.g. "train", "val" etc.
         :return: A task-set containing an image and label support set, and an image and label target set.
         """
+        seed = seed % self.args.total_unique_tasks
         rng = np.random.RandomState(seed)
 
         selected_classes = rng.choice(list(self.dataset_size_dict[dataset_name].keys()),
