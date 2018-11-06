@@ -37,7 +37,7 @@ def get_args():
     parser.add_argument('--meta_learning_rate', type=float, default=0.001, help='Learning rate of overall MAML system')
     parser.add_argument('--meta_opt_bn', type=str, default="False")
     parser.add_argument('--task_learning_rate', type=float, default=0.1, help='Learning rate per task gradient step')
-    
+
     parser.add_argument('--norm_layer', type=str, default="batch_norm")
     parser.add_argument('--max_pooling', type=str, default="False")
     parser.add_argument('--per_step_bn_statistics', type=str, default="False")

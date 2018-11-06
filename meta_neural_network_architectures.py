@@ -34,6 +34,7 @@ def extract_top_level_dict(current_dict):
             new_item[sub_level] = current_dict[key]
             output_dict[top_level] = new_item
 
+    #print(current_dict.keys(), output_dict.keys())
     return output_dict
 
 
@@ -79,6 +80,7 @@ class MetaConv2dLayer(nn.Module):
                 (weight) = params["weight"]
                 bias = None
         else:
+            #print("No inner loop params")
             if self.use_bias:
                 weight, bias = self.weight, self.bias
             else:
@@ -103,7 +105,7 @@ class MetaLinearLayer(nn.Module):
         """
         super(MetaLinearLayer, self).__init__()
         b, c = input_shape
-        # print('input_shape', input_shape, b, c, num_filters)
+        # #print('input_shape', input_shape, b, c, num_filters)
         self.use_bias = use_bias
         self.weights = nn.Parameter(torch.empty(num_filters, c))
         nn.init.normal(self.weights)
@@ -127,6 +129,9 @@ class MetaLinearLayer(nn.Module):
                 (weight) = params["weights"]
                 bias = None
         else:
+            pass
+            #print('no inner loop params', self)
+
             if self.use_bias:
                 weight, bias = self.weights, self.bias
             else:
@@ -214,6 +219,7 @@ class MetaBatchNormLayer(nn.Module):
             params = extract_top_level_dict(current_dict=params)
             (weight, bias) = params["weight"], params["bias"]
         else:
+            #print('no inner loop params', self, num_step)
             weight, bias = self.weight, self.bias
 
         if self.use_per_step_bn_statistics:
@@ -300,6 +306,7 @@ class MetaLayerNormLayer(nn.Module):
             bias = params["bias"]
         else:
             bias = self.bias
+            #print('no inner loop params', self)
 
         return F.layer_norm(
             input, self.normalized_shape, self.weight, bias, self.eps)
@@ -398,6 +405,7 @@ class MetaNormLayerConvReLU(nn.Module):
             conv_params = params['conv']
         else:
             conv_params = None
+            #print('no inner loop params', self)
 
         out = x
 
