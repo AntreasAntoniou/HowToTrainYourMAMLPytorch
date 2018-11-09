@@ -14,7 +14,7 @@ def maybe_unzip_dataset(args):
             print("Not found dataset folder structure.. searching for .tar.bz2 file")
             zip_directory = "{}.tar.bz2".format(os.path.join(os.environ['DATASET_DIR'], datasets[dataset_idx]))
 
-            assert os.path.exists(zip_directory), "{} dataset zip file not found, please download from gdrive https://drive.google.com/open?id=1ljP5AaiwZoS6LmEx6UquG_UScUaUd4-m and " \
+            assert os.path.exists(zip_directory), "{} dataset zip file not found, please download from gdrive https://drive.google.com/file/d/1enHn2UGQjWSg6UvKHBn4mi2AU8rjv9aP/view?usp=sharing and " \
                                                   "place in datasets folder as explained in README".format(zip_directory)
             print("Found zip file, unpacking")
 
