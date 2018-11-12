@@ -35,7 +35,7 @@ We provide the omniglot dataset in the datasets folder directly in this repo. Ho
 substantially larger than github's limit, we chose to upload it on gdrive using pbzip (parallel zip) compression, which
 is one of the fastest compressions available as we are writing this (really helps if you are zipping something as big 
 as today's large scale datasets). We have automated the unzipping and usage of the dataset, all one needs to do is download it
-from our [mini_imagenet gdrive folder](https://drive.google.com/file/d/1enHn2UGQjWSg6UvKHBn4mi2AU8rjv9aP/view?usp=sharing).
+from our [mini_imagenet gdrive folder](https://drive.google.com/file/d/1qQCoGoEJKUCQkk8roncWH7rhPN7aMfBr/view?usp=sharing).
 Once download, please place it in the datasets folder in this repo. The rest will be done automagically when you 
 run your mini-imagenet experiment. 
 

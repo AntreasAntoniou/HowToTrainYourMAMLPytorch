@@ -93,7 +93,7 @@ class MAMLFewShotClassifier(nn.Module):
         """
         loss_weights = np.ones(shape=(self.args.number_of_training_steps_per_iter)) * (
                     1.0 / self.args.number_of_training_steps_per_iter)
-        decay_rate = 1.0 / self.args.number_of_training_steps_per_iter / 20.
+        decay_rate = 1.0 / self.args.number_of_training_steps_per_iter / self.args.multi_step_loss_num_epochs
         min_value_for_non_final_losses = 0.03 / self.args.number_of_training_steps_per_iter
         for i in range(len(loss_weights) - 1):
             curr_value = np.maximum(loss_weights[i] - (self.current_epoch * decay_rate), min_value_for_non_final_losses)
@@ -220,7 +220,7 @@ class MAMLFewShotClassifier(nn.Module):
                                                                   use_second_order=use_second_order,
                                                                   current_step_idx=num_step)
 
-                if use_multi_step_loss_optimization and training_phase and epoch < 20:
+                if use_multi_step_loss_optimization and training_phase and epoch < self.args.multi_step_loss_num_epochs:
                     target_loss, target_preds = self.net_forward(x=x_target_set_task,
                                                                  y=y_target_set_task, weights=names_weights_copy,
                                                                  backup_running_statistics=False, training=True,

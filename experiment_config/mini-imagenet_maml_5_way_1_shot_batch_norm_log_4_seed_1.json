@@ -6,8 +6,8 @@
   "gpu_to_use":0,
   "num_dataprovider_workers":8,
   "max_models_to_save":5,
-  "dataset_name":"mini_imagenet",
-  "dataset_path":"mini_imagenet",
+  "dataset_name":"mini_imagenet_full_size",
+  "dataset_path":"mini_imagenet_full_size",
   "reset_stored_paths":false,
   "experiment_name":"MAML_Mini-Imagenet_5_way_1_shot_64_4_filter_multi_step_loss_seed_1",
   "train_seed": 1, "val_seed": 0,
@@ -15,6 +15,7 @@
   "train_val_test_split": [0.64, 0.16, 0.20],
   "sets_are_pre_split": true,
   "total_unique_tasks": 100000,
+  "multi_step_loss_num_epochs": 50,
 
   "total_epochs": 250,
   "total_iter_per_epoch": 500, "continue_from_epoch": -2,
