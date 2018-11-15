@@ -1,13 +1,17 @@
-import concurrent.futures
 import json
 import os
-
 import numpy as np
-import torch
-import tqdm
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
+import tqdm
+import concurrent.futures
+import pickle
+import torch
 from torchvision import transforms
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+
+from utils.parser_utils import get_args
 
 
 class rotate_image(object):
@@ -36,7 +40,7 @@ class torch_rotate_image(object):
         self.channels = channels
 
     def __call__(self, image):
-        rotate = transforms.RandomRotation(degrees=self.k*90)
+        rotate = transforms.RandomRotation(degrees=self.k * 90)
         if image.shape[-1] == 1:
             image = image[:, :, 0]
         image = Image.fromarray(image)
@@ -55,8 +59,6 @@ def augment_image(image, k, channels, augment_bool, args, dataset_name):
         output_images = []
         for image in images:
             if augment_bool is True:
-                # print("augment")
-                # meanstd transformation
                 for transform_current in transform_train:
                     image = transform_current(image)
             else:
@@ -113,8 +115,11 @@ class FewShotLearningDatasetParallel(Dataset):
         """
         self.data_path = args.dataset_path
         self.dataset_name = args.dataset_name
+        self.loaded_into_memory = False
+        self.image_height, self.image_width, self.image_channel = args.image_height, args.image_width, args.image_channels
         self.args = args
         self.indexes_of_folders_indicating_class = args.indexes_of_folders_indicating_class
+        self.reverse_channels = args.reverse_channels
         self.labels_as_int = args.labels_as_int
         self.train_val_test_split = args.train_val_test_split
         self.current_set_name = "train"
@@ -122,12 +127,9 @@ class FewShotLearningDatasetParallel(Dataset):
         self.reset_stored_filepaths = args.reset_stored_filepaths
         self.init_seed = {"train": args.train_seed, "val": args.val_seed, 'test': args.val_seed}
         self.seed = {"train": args.train_seed, "val": args.val_seed, 'test': args.val_seed}
-        self.rng = np.random.RandomState(seed=self.seed['val'])
-        self.datasets = self.load_dataset()
         self.num_of_gpus = args.num_of_gpus
         self.batch_size = args.batch_size
-        self.reverse_channels = args.reverse_channels
-        self.image_height, self.image_width, self.image_channel = args.image_height, args.image_width, args.image_channels
+
         self.train_index = 0
         self.val_index = 0
         self.test_index = 0
@@ -135,6 +137,9 @@ class FewShotLearningDatasetParallel(Dataset):
         self.augment_images = False
         self.num_samples_per_class = args.num_samples_per_class
         self.num_classes_per_set = args.num_classes_per_set
+
+        self.rng = np.random.RandomState(seed=self.seed['val'])
+        self.datasets = self.load_dataset()
 
         self.indexes = {"train": 0, "val": 0, 'test': 0}
         self.dataset_size_dict = {
@@ -156,9 +161,10 @@ class FewShotLearningDatasetParallel(Dataset):
         meta-val and meta-test in the paper)
         """
         rng = np.random.RandomState(seed=self.seed['val'])
-        data_image_paths, index_to_label_name_dict_file, label_to_index = self.load_datapaths()
-        dataset_splits = dict()
+
         if self.args.sets_are_pre_split == True:
+            data_image_paths, index_to_label_name_dict_file, label_to_index = self.load_datapaths()
+            dataset_splits = dict()
             for key, value in data_image_paths.items():
                 key = self.get_label_from_index(index=key)
                 bits = key.split("/")
@@ -168,8 +174,8 @@ class FewShotLearningDatasetParallel(Dataset):
                     dataset_splits[set_name] = {class_label: value}
                 else:
                     dataset_splits[set_name][class_label] = value
-            return dataset_splits
         else:
+            data_image_paths, index_to_label_name_dict_file, label_to_index = self.load_datapaths()
             total_label_types = len(data_image_paths)
             num_classes_idx = np.arange(len(data_image_paths.keys()), dtype=np.int32)
             rng.shuffle(num_classes_idx)
@@ -190,7 +196,26 @@ class FewShotLearningDatasetParallel(Dataset):
                                      {class_key: data_image_paths[class_key] for class_key in x_val_classes}, \
                                      {class_key: data_image_paths[class_key] for class_key in x_test_classes},
             dataset_splits = {"train": x_train, "val": x_val, "test": x_test}
-            return dataset_splits
+
+        if self.args.load_into_memory is True:
+            print("Loading data into RAM")
+            x_loaded = {"train": [], "val": [], "test": []}
+
+            for set_key, set_value in dataset_splits.items():
+                print("Currently loading into memory the {} set".format(set_key))
+                x_loaded[set_key] = {i: [] for i in set_value.keys()}
+                # for class_key, class_value in set_value.items():
+                with tqdm.tqdm(total=len(set_value)) as pbar_memory_load:
+                    with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
+                        # Process the list of files, but split the work across the process pool to use all CPUs!
+                        for (class_label, class_images_loaded) in executor.map(self.load_parallel_batch, (set_value.items())):
+                            x_loaded[set_key][class_label] = class_images_loaded
+                            pbar_memory_load.update(1)
+
+            dataset_splits = x_loaded
+            self.loaded_into_memory = True
+
+        return dataset_splits
 
     def load_datapaths(self):
         """
@@ -339,17 +364,19 @@ class FewShotLearningDatasetParallel(Dataset):
         :param channels: The number of channels to keep
         :return: An image array of shape (h, w, channels), whose values range between 0.0 and 1.0.
         """
-        image = Image.open(image_path)
-        if 'omniglot' in self.dataset_name:
-            image = image.resize((self.image_height, self.image_width), resample=Image.LANCZOS)
-            image = np.array(image, np.float32)
+        if not self.loaded_into_memory:
+            image = Image.open(image_path)
+            if 'omniglot' in self.dataset_name:
+                image = image.resize((self.image_height, self.image_width), resample=Image.LANCZOS)
+                image = np.array(image, np.float32)
+                if channels == 1:
+                    image = np.expand_dims(image, axis=2)
+            else:
+                image = image.resize((self.image_height, self.image_width)).convert('RGB')
+                image = np.array(image, np.float32)
+                image = image / 255.0
         else:
-            image = image.resize((self.image_height, self.image_width)).convert('RGB')
-            image = np.array(image, np.float32)
-            image = image / 255.0
-
-        if channels == 1:
-            image = np.expand_dims(image, axis=2)
+            image = image_path
 
         return image
 
@@ -361,14 +388,34 @@ class FewShotLearningDatasetParallel(Dataset):
         """
         image_batch = []
 
-        for image_path in batch_image_paths:
-            image = self.load_image(image_path=image_path, channels=self.image_channel)
-            image_batch.append(image)
+        if self.loaded_into_memory:
+            for image_path in batch_image_paths:
+                image_batch.append(image_path)
+            image_batch = np.array(image_batch, dtype=np.float32)
+        else:
+            image_batch = [self.load_image(image_path=image_path, channels=self.image_channel)
+                           for image_path in batch_image_paths]
+
+            image_batch = np.array(image_batch, dtype=np.float32)
+            image_batch = self.preprocess_data(image_batch)
+
+        return image_batch
+
+    def load_parallel_batch(self, inputs):
+        """
+        Load a batch of images, given a list of filepaths
+        :param batch_image_paths: A list of filepaths
+        :return: A numpy array of images of shape batch, height, width, channels
+        """
+        class_label, batch_image_paths = inputs
+
+        image_batch = [self.load_image(image_path=image_path, channels=self.image_channel)
+                       for image_path in batch_image_paths]
 
         image_batch = np.array(image_batch, dtype=np.float32)
         image_batch = self.preprocess_data(image_batch)
 
-        return image_batch
+        return class_label, image_batch
 
     def preprocess_data(self, x):
         """
@@ -414,7 +461,6 @@ class FewShotLearningDatasetParallel(Dataset):
         """
         seed = seed % self.args.total_unique_tasks
         rng = np.random.RandomState(seed)
-
         selected_classes = rng.choice(list(self.dataset_size_dict[dataset_name].keys()),
                                       size=self.num_classes_per_set, replace=False)
         rng.shuffle(selected_classes)
@@ -448,10 +494,10 @@ class FewShotLearningDatasetParallel(Dataset):
         x_images = torch.stack(x_images)
         y_labels = np.array(y_labels, dtype=np.int32)
 
-        target_set_images = x_images[:, self.num_samples_per_class:]
-        target_set_labels = y_labels[:, self.num_samples_per_class:]
         support_set_images = x_images[:, :self.num_samples_per_class]
         support_set_labels = y_labels[:, :self.num_samples_per_class]
+        target_set_images = x_images[:, self.num_samples_per_class:]
+        target_set_labels = y_labels[:, self.num_samples_per_class:]
 
         return support_set_images, target_set_images, support_set_labels, target_set_labels
 

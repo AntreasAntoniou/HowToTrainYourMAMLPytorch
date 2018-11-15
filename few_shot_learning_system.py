@@ -54,14 +54,11 @@ class MAMLFewShotClassifier(nn.Module):
                                                   args=args, device=device, meta_classifier=True).to(device=self.device)
         self.task_learning_rate = args.task_learning_rate
 
-
-        if self.task_learning_rate == -1:
-            names_weights_copy = self.get_inner_loop_parameter_dict(self.classifier.named_parameters())
-            self.task_learning_rate = nn.Parameter(
-                data=0.1 * torch.ones((self.args.number_of_training_steps_per_iter, len(names_weights_copy.keys()))),
-                requires_grad=True)
-        else:
-            self.task_learning_rate = torch.ones((1)) * args.task_learning_rate
+        names_weights_copy = self.get_inner_loop_parameter_dict(self.classifier.named_parameters())
+        self.task_learning_rate = nn.Parameter(
+            data=self.args.init_inner_loop_learning_rate * torch.ones(
+                (self.args.number_of_training_steps_per_iter, len(names_weights_copy.keys()))),
+            requires_grad=self.args.learnable_per_layer_per_step_inner_loop_learning_rate)
 
         self.task_learning_rate.to(device=self.device)
 
@@ -92,7 +89,7 @@ class MAMLFewShotClassifier(nn.Module):
         the MSL (Multi Step Loss) mechanism.
         """
         loss_weights = np.ones(shape=(self.args.number_of_training_steps_per_iter)) * (
-                    1.0 / self.args.number_of_training_steps_per_iter)
+                1.0 / self.args.number_of_training_steps_per_iter)
         decay_rate = 1.0 / self.args.number_of_training_steps_per_iter / self.args.multi_step_loss_num_epochs
         min_value_for_non_final_losses = 0.03 / self.args.number_of_training_steps_per_iter
         for i in range(len(loss_weights) - 1):
@@ -137,15 +134,11 @@ class MAMLFewShotClassifier(nn.Module):
         grads = torch.autograd.grad(loss, names_weights_copy.values(),
                                     create_graph=use_second_order)
 
-        if len(self.task_learning_rate.shape) > 1:
-            updated_weights = list(map(
-                lambda p: p[1].to(device=self.device) - p[2].to(device=self.device) *
-                          p[0].to(device=self.device),
-                zip(grads, names_weights_copy.values(), self.task_learning_rate[current_step_idx])))
-        else:
-            updated_weights = list(map(
-                lambda p: p[1].to(device=self.device) - self.task_learning_rate[0].to(device=self.device) * p[0].to(
-                    device=self.device), zip(grads, names_weights_copy.values())))
+        updated_weights = list(map(
+            lambda current_params, learning_rates, grads: current_params.to(device=self.device) -
+                                                          (learning_rates.to(device=self.device) *
+                                                           grads.to(device=self.device)),
+            names_weights_copy.values(), self.task_learning_rate[current_step_idx], grads))
 
         names_weights_copy = dict(zip(names_weights_copy.keys(), updated_weights))
 
@@ -162,7 +155,8 @@ class MAMLFewShotClassifier(nn.Module):
             for idx_num_step, learning_rate_num_step in enumerate(self.task_learning_rate):
                 for idx, learning_rate in enumerate(learning_rate_num_step):
                     losses['task_learning_rate_num_step_{}_{}'.format(idx_num_step,
-                                                             names_weights[idx])] = learning_rate.detach().cpu().numpy()
+                                                                      names_weights[
+                                                                          idx])] = learning_rate.detach().cpu().numpy()
         else:
             losses['task_learning_rate'] = self.task_learning_rate.detach().cpu().numpy()[0]
 
@@ -234,7 +228,6 @@ class MAMLFewShotClassifier(nn.Module):
                                                                      backup_running_statistics=False, training=True,
                                                                      num_step=num_step)
                         task_losses.append(target_loss)
-
 
             _, predicted = torch.max(target_preds.data, 1)
             accuracy = list(predicted.eq(y_target_set_task.data).cpu())
@@ -369,7 +362,6 @@ class MAMLFewShotClassifier(nn.Module):
         :param epoch: the index of the current epoch
         :return: The losses of the ran iteration.
         """
-
 
         if self.training:
             self.eval()

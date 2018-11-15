@@ -1,10 +1,11 @@
 import os
+import shutil
 
 def maybe_unzip_dataset(args):
 
     datasets = [args.dataset_name]
     dataset_paths = [args.dataset_path]
-
+    done = False
 
     for dataset_idx, dataset_path in enumerate(dataset_paths):
         if dataset_path.endswith('/'):
@@ -20,7 +21,27 @@ def maybe_unzip_dataset(args):
 
             unzip_file(filepath_pack=os.path.join(os.environ['DATASET_DIR'], "{}.tar.bz2".format(datasets[dataset_idx])),
                        filepath_to_store=os.environ['DATASET_DIR'])
+
+
+
             args.reset_stored_filepaths = True
+
+        total_files = 0
+        for subdir, dir, files in os.walk(dataset_path):
+            for file in files:
+                if file.lower().endswith(".jpeg") or file.lower().endswith(".jpg") or file.lower().endswith(
+                        ".png") or file.lower().endswith(".pkl"):
+                    total_files += 1
+        print("count stuff________________________________________", total_files)
+        if (total_files == 1623 * 20 and datasets[dataset_idx] == 'omniglot_dataset') or (
+                total_files == 100 * 600 and 'mini_imagenet' in datasets[dataset_idx]) or (
+                total_files == 3 and 'mini_imagenet_pkl' in datasets[dataset_idx]):
+            print("file count is correct")
+            done = True
+
+        if not done:
+            shutil.rmtree(dataset_path, ignore_errors=True)
+            maybe_unzip_dataset(args)
 
 
 def unzip_file(filepath_pack, filepath_to_store):
