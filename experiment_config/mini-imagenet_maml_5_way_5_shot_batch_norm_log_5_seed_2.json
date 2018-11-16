@@ -14,7 +14,7 @@
   "indexes_of_folders_indicating_class": [-3, -2],
   "train_val_test_split": [0.64, 0.16, 0.20],
   "sets_are_pre_split": true,
-  "total_unique_tasks": 100000,
+  "total_unique_tasks": 1000000,
   "multi_step_loss_num_epochs": 50,
   "load_into_memory": true,
 
