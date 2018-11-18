@@ -131,6 +131,7 @@ class MAMLFewShotClassifier(nn.Module):
         :param current_step_idx: Current step's index.
         :return: A dictionary with the updated weights (name, param)
         """
+        self.classifier.zero_grad(names_weights_copy)
         grads = torch.autograd.grad(loss, names_weights_copy.values(),
                                     create_graph=use_second_order)
 
@@ -182,7 +183,7 @@ class MAMLFewShotClassifier(nn.Module):
 
         total_losses = []
         total_accuracies = []
-
+        self.classifier.zero_grad()
         for task_id, (x_support_set_task, y_support_set_task, x_target_set_task, y_target_set_task) in \
                 enumerate(zip(x_support_set,
                               y_support_set,
@@ -264,14 +265,11 @@ class MAMLFewShotClassifier(nn.Module):
         :param num_step: An integer indicating the number of the step in the inner loop.
         :return: the crossentropy losses with respect to the given y, the predictions of the base model.
         """
-        input_var = torch.autograd.Variable(x).to(device=self.device)
-        target_var = torch.autograd.Variable(y).to(device=self.device)
-
-        preds = self.classifier.forward(x=input_var, params=weights,
+        preds = self.classifier.forward(x=x, params=weights,
                                         training=training,
                                         backup_running_statistics=backup_running_statistics, num_step=num_step)
 
-        loss = F.cross_entropy(input=preds, target=target_var)
+        loss = F.cross_entropy(input=preds, target=y)
 
         return loss, preds
 
@@ -319,7 +317,7 @@ class MAMLFewShotClassifier(nn.Module):
         if 'imagenet' in self.args.dataset_name:
             for name, param in self.classifier.named_parameters():
                 if param.requires_grad:
-                    param.grad.data.clamp_(-10, 10)
+                    param.grad.data.clamp_(-10, 10) # not sure if this is necessary, more experiments are needed
         self.optimizer.step()
 
     def run_train_iter(self, data_batch, epoch):

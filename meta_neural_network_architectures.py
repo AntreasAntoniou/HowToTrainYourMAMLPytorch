@@ -39,7 +39,7 @@ def extract_top_level_dict(current_dict):
 
 
 class MetaConv2dLayer(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, use_bias, dilation_rate=1):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, use_bias, groups=1, dilation_rate=1):
         """
         A MetaConv2D layer. Applies the same functionality of a standard Conv2D layer with the added functionality of
         being able to receive a parameter dictionary at the forward pass which allows the convolution to use external
@@ -58,8 +58,9 @@ class MetaConv2dLayer(nn.Module):
         self.padding = int(padding)
         self.dilation_rate = int(dilation_rate)
         self.use_bias = use_bias
+        self.groups = int(groups)
         self.weight = nn.Parameter(torch.empty(num_filters, in_channels, kernel_size, kernel_size))
-        nn.init.xavier_normal_(self.weight)
+        nn.init.normal_(self.weight)
 
         if self.use_bias:
             self.bias = nn.Parameter(torch.zeros(num_filters))
@@ -88,7 +89,7 @@ class MetaConv2dLayer(nn.Module):
                 bias = None
 
         out = F.conv2d(input=x, weight=weight, bias=bias, stride=self.stride,
-                       padding=self.padding, dilation=self.dilation_rate, groups=1)
+                       padding=self.padding, dilation=self.dilation_rate, groups=self.groups)
         return out
 
 
@@ -473,11 +474,12 @@ class VGGLeakyReLUNormNetwork(nn.Module):
         out = x
         self.layer_dict = nn.ModuleDict()
         self.upscale_shapes.append(x.shape)
+        padding = 0 if "mini_imagenet" in self.args.dataset_name else 1
         for i in range(self.num_stages):
             self.layer_dict['conv{}'.format(i)] = MetaNormLayerConvReLU(input_shape=out.shape,
                                                                         num_filters=self.cnn_filters,
                                                                         kernel_size=3, stride=self.conv_stride,
-                                                                        padding=1,
+                                                                        padding=padding,
                                                                         use_bias=True, args=self.args,
                                                                         normalization=False if i == 0 else True,
                                                                         meta_layer=self.meta_classifier,
@@ -569,6 +571,23 @@ class VGGLeakyReLUNormNetwork(nn.Module):
         out = self.layer_dict['linear'](out, param_dict['linear'])
 
         return out
+
+    def zero_grad(self, params=None):
+        if params is None:
+            for param in self.parameters():
+                if param.requires_grad == True:
+                    if param.grad is not None:
+                        if torch.sum(param.grad) > 0:
+                            print(param.grad)
+                            param.grad.zero_()
+        else:
+            for name, param in params.items():
+                if param.requires_grad == True:
+                    if param.grad is not None:
+                        if torch.sum(param.grad) > 0:
+                            print(param.grad)
+                            param.grad.zero_()
+                            params[name].grad = None
 
     def restore_backup_stats(self):
         """

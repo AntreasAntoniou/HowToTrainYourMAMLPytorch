@@ -390,7 +390,7 @@ class FewShotLearningDatasetParallel(Dataset):
 
         if self.loaded_into_memory:
             for image_path in batch_image_paths:
-                image_batch.append(image_path)
+                image_batch.append(np.copy(image_path))
             image_batch = np.array(image_batch, dtype=np.float32)
         else:
             image_batch = [self.load_image(image_path=image_path, channels=self.image_channel)
