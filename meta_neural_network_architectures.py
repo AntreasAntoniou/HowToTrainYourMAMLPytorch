@@ -145,7 +145,6 @@ class MetaLinearLayer(nn.Module):
         out = F.linear(input=x, weight=weight, bias=bias)
         return out
 
-
 class MetaBatchNormLayer(nn.Module):
     def __init__(self, num_features, device, args, eps=1e-5, momentum=0.1, affine=True,
                  track_running_stats=True, meta_batch_norm=True, no_learnable_params=False,
@@ -190,6 +189,10 @@ class MetaBatchNormLayer(nn.Module):
         else:
             self.running_mean = nn.Parameter(torch.zeros(num_features), requires_grad=False)
             self.running_var = nn.Parameter(torch.zeros(num_features), requires_grad=False)
+            self.bias = nn.Parameter(torch.zeros(num_features),
+                                     requires_grad=True)
+            self.weight = nn.Parameter(torch.ones(num_features),
+                                       requires_grad=True)
 
         if self.args.enable_inner_loop_optimizable_bn_params:
             self.bias = nn.Parameter(torch.zeros(num_features),
@@ -218,7 +221,9 @@ class MetaBatchNormLayer(nn.Module):
         if params is not None:
             params = extract_top_level_dict(current_dict=params)
             (weight, bias) = params["weight"], params["bias"]
+            #print(num_step, params['weight'])
         else:
+            #print(num_step, "no params")
             weight, bias = self.weight, self.bias
 
         if self.use_per_step_bn_statistics:
@@ -255,8 +260,6 @@ class MetaBatchNormLayer(nn.Module):
     def extra_repr(self):
         return '{num_features}, eps={eps}, momentum={momentum}, affine={affine}, ' \
                'track_running_stats={track_running_stats}'.format(**self.__dict__)
-
-
 
 class MetaLayerNormLayer(nn.Module):
     def __init__(self, input_feature_shape, eps=1e-5, elementwise_affine=True):
