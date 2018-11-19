@@ -111,13 +111,12 @@ class MAMLFewShotClassifier(nn.Module):
         """
         param_dict = dict()
         for name, param in params:
-            if "norm_layer" in name:
-                if param.requires_grad and self.args.enable_inner_loop_optimizable_bn_params:
+            if param.requires_grad:
+                if self.args.enable_inner_loop_optimizable_bn_params:
                     param_dict[name] = param.to(device=self.device)
-
-            else:
-                if param.requires_grad:
-                    param_dict[name] = param.to(device=self.device)
+                else:
+                    if "norm_layer" not in name:
+                        param_dict[name] = param.to(device=self.device)
 
         return param_dict
 
