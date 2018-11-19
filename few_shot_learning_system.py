@@ -112,7 +112,7 @@ class MAMLFewShotClassifier(nn.Module):
         param_dict = dict()
         for name, param in params:
             if "norm_layer" in name:
-                if param.requires_grad and self.args.meta_opt_bn:
+                if param.requires_grad and self.args.enable_inner_loop_optimizable_bn_params:
                     param_dict[name] = param.to(device=self.device)
 
             else:
@@ -232,8 +232,7 @@ class MAMLFewShotClassifier(nn.Module):
 
             _, predicted = torch.max(target_preds.data, 1)
             accuracy = list(predicted.eq(y_target_set_task.data).cpu())
-            task_accuracies.extend(accuracy)
-            task_accuracies = np.mean(task_accuracies)
+            task_accuracies = np.mean(accuracy)
             task_losses = torch.sum(torch.stack(task_losses))
             total_losses.append(task_losses)
             total_accuracies.append(task_accuracies)

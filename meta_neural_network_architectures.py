@@ -1,5 +1,7 @@
 import numbers
 from collections import OrderedDict
+from copy import copy
+
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
@@ -94,7 +96,7 @@ class MetaConv2dLayer(nn.Module):
 
 
 class MetaLinearLayer(nn.Module):
-    def __init__(self, input_shape, num_filters, use_bias):
+    def __init__(self, input_shape, num_filters, use_bias, is_logits_layer=False):
         """
         A MetaLinear layer. Applies the same functionality of a standard linearlayer with the added functionality of
         being able to receive a parameter dictionary at the forward pass which allows the convolution to use external
@@ -108,8 +110,9 @@ class MetaLinearLayer(nn.Module):
         b, c = input_shape
         # #print('input_shape', input_shape, b, c, num_filters)
         self.use_bias = use_bias
-        self.weights = nn.Parameter(torch.empty(num_filters, c))
-        nn.init.normal(self.weights)
+        self.weights = nn.Parameter(torch.ones(num_filters, c))
+        if not is_logits_layer:
+            nn.init.normal(self.weights)
         if self.use_bias:
             self.bias = nn.Parameter(torch.zeros(num_filters))
 
@@ -175,16 +178,6 @@ class MetaBatchNormLayer(nn.Module):
         self.use_per_step_bn_statistics = use_per_step_bn_statistics
         self.args = args
 
-        if no_learnable_params:
-            self.weight = nn.Parameter(torch.ones(num_features), requires_grad=False)
-            self.bias = nn.Parameter(torch.zeros(num_features), requires_grad=False)
-        elif meta_batch_norm:
-            self.weight = nn.Parameter(torch.ones(num_features), requires_grad=False)
-            self.bias = nn.Parameter(torch.zeros(num_features), requires_grad=True)
-        else:
-            self.weight = nn.Parameter(torch.ones(num_features), requires_grad=True)
-            self.bias = nn.Parameter(torch.zeros(num_features), requires_grad=True)
-
         if use_per_step_bn_statistics:
             self.running_mean = nn.Parameter(torch.zeros(args.number_of_training_steps_per_iter, num_features),
                                              requires_grad=False)
@@ -196,10 +189,16 @@ class MetaBatchNormLayer(nn.Module):
                                        requires_grad=True)
         else:
             self.running_mean = nn.Parameter(torch.zeros(num_features), requires_grad=False)
-            self.running_var = nn.Parameter(torch.ones(num_features), requires_grad=False)
+            self.running_var = nn.Parameter(torch.zeros(num_features), requires_grad=False)
 
-        self.backup_running_mean = self.running_mean.clone()
-        self.backup_running_var = self.running_var.clone()
+        if self.args.enable_inner_loop_optimizable_bn_params:
+            self.bias = nn.Parameter(torch.zeros(num_features),
+                                     requires_grad=True)
+            self.weight = nn.Parameter(torch.ones(num_features),
+                                       requires_grad=True)
+
+        self.backup_running_mean = torch.zeros(self.running_mean.shape)
+        self.backup_running_var = torch.ones(self.running_var.shape)
 
         self.momentum = momentum
 
@@ -220,21 +219,23 @@ class MetaBatchNormLayer(nn.Module):
             params = extract_top_level_dict(current_dict=params)
             (weight, bias) = params["weight"], params["bias"]
         else:
-            #print('no inner loop params', self, num_step)
             weight, bias = self.weight, self.bias
 
         if self.use_per_step_bn_statistics:
             running_mean = self.running_mean[num_step]
             running_var = self.running_var[num_step]
-            bias = bias[num_step]
-            weight = weight[num_step]
+            if params is None:
+                if not self.args.enable_inner_loop_optimizable_bn_params:
+                    bias = self.bias[num_step]
+                    weight = self.weight[num_step]
         else:
             running_mean = None
             running_var = None
 
+
         if backup_running_statistics and self.use_per_step_bn_statistics:
-            self.backup_running_mean = self.running_mean.clone()
-            self.backup_running_var = self.running_var.clone()
+            self.backup_running_mean.data = copy(self.running_mean.data)
+            self.backup_running_var.data = copy(self.running_var.data)
 
         momentum = self.momentum
 
@@ -254,6 +255,7 @@ class MetaBatchNormLayer(nn.Module):
     def extra_repr(self):
         return '{num_features}, eps={eps}, momentum={momentum}, affine={affine}, ' \
                'track_running_stats={track_running_stats}'.format(**self.__dict__)
+
 
 
 class MetaLayerNormLayer(nn.Module):
@@ -474,12 +476,12 @@ class VGGLeakyReLUNormNetwork(nn.Module):
         out = x
         self.layer_dict = nn.ModuleDict()
         self.upscale_shapes.append(x.shape)
-        padding = 0 if "mini_imagenet" in self.args.dataset_name else 1
+
         for i in range(self.num_stages):
             self.layer_dict['conv{}'.format(i)] = MetaNormLayerConvReLU(input_shape=out.shape,
                                                                         num_filters=self.cnn_filters,
                                                                         kernel_size=3, stride=self.conv_stride,
-                                                                        padding=padding,
+                                                                        padding=1,
                                                                         use_bias=True, args=self.args,
                                                                         normalization=False if i == 0 else True,
                                                                         meta_layer=self.meta_classifier,
@@ -515,7 +517,8 @@ class VGGLeakyReLUNormNetwork(nn.Module):
         out = out.view(out.shape[0], -1)
 
         self.layer_dict['linear'] = MetaLinearLayer(input_shape=(out.shape[0], np.prod(out.shape[1:])),
-                                                    num_filters=self.num_output_classes, use_bias=True)
+                                                    num_filters=self.num_output_classes, use_bias=True,
+                                                    is_logits_layer=True)
 
         out = self.layer_dict['linear'](out)
         print("VGGNetwork build", out.shape)

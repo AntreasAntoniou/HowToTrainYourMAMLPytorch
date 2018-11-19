@@ -16,7 +16,7 @@
   "train_val_test_split": [0.64, 0.16, 0.20],
   "total_unique_tasks": 1000000,
   "multi_step_loss_num_epochs": 50,
-  "load_into_memory": true,
+  "load_into_memory": false,
 
   "total_epochs": 250,
   "total_iter_per_epoch":500, "continue_from_epoch": -2,
@@ -24,6 +24,7 @@
   "max_pooling": true,
   "per_step_bn_statistics": true,
   "learnable_batch_norm_momentum": false,
+  "enable_inner_loop_optimizable_bn_params": true,
 
   "dropout_rate_value":0.0,
   "min_learning_rate":0.00001,
