@@ -231,7 +231,6 @@ class MetaBatchNormLayer(nn.Module):
             running_var = self.running_var[num_step]
             if params is None:
                 if not self.args.enable_inner_loop_optimizable_bn_params:
-                    print(num_step)
                     bias = self.bias[num_step]
                     weight = self.weight[num_step]
         else:
