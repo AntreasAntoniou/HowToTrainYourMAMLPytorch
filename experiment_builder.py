@@ -222,7 +222,6 @@ class ExperimentBuilder(object):
                        total=int(self.args.total_iter_per_epoch * self.args.total_epochs)) as pbar_train:
 
             while self.state['current_iter'] < (self.args.total_epochs * self.args.total_iter_per_epoch):
-                better_val_model = False
 
                 for train_sample_idx, train_sample in enumerate(
                         self.data.get_train_batches(total_batches=int(self.args.total_iter_per_epoch *
@@ -240,7 +239,7 @@ class ExperimentBuilder(object):
                         sample_idx=self.state['current_iter'])
 
                     if self.state['current_iter'] % self.args.total_iter_per_epoch == 0:
-
+                        better_val_model = False
                         total_losses = dict()
                         val_losses = dict()
                         with tqdm.tqdm(total=self.args.total_iter_per_epoch) as pbar_val:
