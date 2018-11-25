@@ -94,11 +94,15 @@ def get_transforms_for_dataset(dataset_name, args, k):
         transform_train = [rotate_image(k=k, channels=args.image_channels), transforms.ToTensor()]
         transform_evaluate = [transforms.ToTensor()]
 
+
     elif 'imagenet' in dataset_name:
+
         transform_train = [transforms.Compose([
+
             transforms.ToTensor(), transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])]
 
         transform_evaluate = [transforms.Compose([
+
             transforms.ToTensor(), transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])]
 
     return transform_train, transform_evaluate
@@ -115,7 +119,7 @@ class FewShotLearningDatasetParallel(Dataset):
         """
         self.data_path = args.dataset_path
         self.dataset_name = args.dataset_name
-        self.loaded_into_memory = False
+        self.data_loaded_in_memory = False
         self.image_height, self.image_width, self.image_channel = args.image_height, args.image_width, args.image_channels
         self.args = args
         self.indexes_of_folders_indicating_class = args.indexes_of_folders_indicating_class
@@ -125,6 +129,15 @@ class FewShotLearningDatasetParallel(Dataset):
         self.current_set_name = "train"
         self.num_target_samples = args.num_target_samples
         self.reset_stored_filepaths = args.reset_stored_filepaths
+        val_rng = np.random.RandomState(seed=args.val_seed)
+        val_seed = val_rng.randint(1, 999999)
+        train_rng = np.random.RandomState(seed=args.train_seed)
+        train_seed = train_rng.randint(1, 999999)
+        test_rng = np.random.RandomState(seed=args.val_seed)
+        test_seed = test_rng.randint(1, 999999)
+        args.val_seed = val_seed
+        args.train_seed = train_seed
+        args.test_seed = test_seed
         self.init_seed = {"train": args.train_seed, "val": args.val_seed, 'test': args.val_seed}
         self.seed = {"train": args.train_seed, "val": args.val_seed, 'test': args.val_seed}
         self.num_of_gpus = args.num_of_gpus
@@ -195,15 +208,16 @@ class FewShotLearningDatasetParallel(Dataset):
             x_train, x_val, x_test = {class_key: data_image_paths[class_key] for class_key in x_train_classes}, \
                                      {class_key: data_image_paths[class_key] for class_key in x_val_classes}, \
                                      {class_key: data_image_paths[class_key] for class_key in x_test_classes},
-            dataset_splits = {"train": x_train, "val": x_val, "test": x_test}
+            dataset_splits = {"train": x_train, "val":x_val , "test": x_test}
 
         if self.args.load_into_memory is True:
+
             print("Loading data into RAM")
             x_loaded = {"train": [], "val": [], "test": []}
 
             for set_key, set_value in dataset_splits.items():
                 print("Currently loading into memory the {} set".format(set_key))
-                x_loaded[set_key] = {i: [] for i in set_value.keys()}
+                x_loaded[set_key] = {key: np.zeros(len(value), ) for key, value in set_value.items()}
                 # for class_key, class_value in set_value.items():
                 with tqdm.tqdm(total=len(set_value)) as pbar_memory_load:
                     with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
@@ -213,7 +227,7 @@ class FewShotLearningDatasetParallel(Dataset):
                             pbar_memory_load.update(1)
 
             dataset_splits = x_loaded
-            self.loaded_into_memory = True
+            self.data_loaded_in_memory = True
 
         return dataset_splits
 
@@ -299,7 +313,7 @@ class FewShotLearningDatasetParallel(Dataset):
         for subdir, dir, files in os.walk(self.data_path):
             for file in files:
                 if (".jpeg") in file.lower() or (".png") in file.lower() or (".jpg") in file.lower():
-                    filepath = os.path.join(subdir, file)
+                    filepath = os.path.abspath(os.path.join(subdir, file))
                     label = self.get_label_from_path(filepath)
                     data_image_path_list_raw.append(filepath)
                     labels.add(label)
@@ -364,7 +378,7 @@ class FewShotLearningDatasetParallel(Dataset):
         :param channels: The number of channels to keep
         :return: An image array of shape (h, w, channels), whose values range between 0.0 and 1.0.
         """
-        if not self.loaded_into_memory:
+        if not self.data_loaded_in_memory:
             image = Image.open(image_path)
             if 'omniglot' in self.dataset_name:
                 image = image.resize((self.image_height, self.image_width), resample=Image.LANCZOS)
@@ -388,14 +402,14 @@ class FewShotLearningDatasetParallel(Dataset):
         """
         image_batch = []
 
-        if self.loaded_into_memory:
+        if self.data_loaded_in_memory:
             for image_path in batch_image_paths:
-                image_batch.append(np.copy(image_path))
+                image_batch.append(image_path)
             image_batch = np.array(image_batch, dtype=np.float32)
+            #print(image_batch.shape)
         else:
             image_batch = [self.load_image(image_path=image_path, channels=self.image_channel)
                            for image_path in batch_image_paths]
-
             image_batch = np.array(image_batch, dtype=np.float32)
             image_batch = self.preprocess_data(image_batch)
 
@@ -408,12 +422,20 @@ class FewShotLearningDatasetParallel(Dataset):
         :return: A numpy array of images of shape batch, height, width, channels
         """
         class_label, batch_image_paths = inputs
+        image_batch = []
 
-        image_batch = [self.load_image(image_path=image_path, channels=self.image_channel)
-                       for image_path in batch_image_paths]
+        if self.data_loaded_in_memory:
+            for image_path in batch_image_paths:
+                image_batch.append(np.copy(image_path))
+            image_batch = np.array(image_batch, dtype=np.float32)
+        else:
+            #with tqdm.tqdm(total=1) as load_pbar:
+            image_batch = [self.load_image(image_path=image_path, channels=self.image_channel)
+                           for image_path in batch_image_paths]
+                #load_pbar.update(1)
 
-        image_batch = np.array(image_batch, dtype=np.float32)
-        image_batch = self.preprocess_data(image_batch)
+            image_batch = np.array(image_batch, dtype=np.float32)
+            image_batch = self.preprocess_data(image_batch)
 
         return class_label, image_batch
 
@@ -459,7 +481,7 @@ class FewShotLearningDatasetParallel(Dataset):
         :param set_name: The name of the set to use, e.g. "train", "val" etc.
         :return: A task-set containing an image and label support set, and an image and label target set.
         """
-        seed = seed % self.args.total_unique_tasks
+        #seed = seed % self.args.total_unique_tasks
         rng = np.random.RandomState(seed)
         selected_classes = rng.choice(list(self.dataset_size_dict[dataset_name].keys()),
                                       size=self.num_classes_per_set, replace=False)
@@ -492,14 +514,14 @@ class FewShotLearningDatasetParallel(Dataset):
             y_labels.append(class_labels)
 
         x_images = torch.stack(x_images)
-        y_labels = np.array(y_labels, dtype=np.int32)
+        y_labels = np.array(y_labels, dtype=np.float32)
 
         support_set_images = x_images[:, :self.num_samples_per_class]
         support_set_labels = y_labels[:, :self.num_samples_per_class]
         target_set_images = x_images[:, self.num_samples_per_class:]
         target_set_labels = y_labels[:, self.num_samples_per_class:]
 
-        return support_set_images, target_set_images, support_set_labels, target_set_labels
+        return support_set_images, target_set_images, support_set_labels, target_set_labels, seed
 
     def __len__(self):
         total_samples = self.data_length[self.current_set_name]
@@ -521,12 +543,11 @@ class FewShotLearningDatasetParallel(Dataset):
         self.seed[dataset_name] = seed
 
     def __getitem__(self, idx):
-        support_set_images, target_set_image, support_set_labels, target_set_label = \
+        support_set_images, target_set_image, support_set_labels, target_set_label, seed = \
             self.get_set(self.current_set_name, seed=self.seed[self.current_set_name] + idx,
                          augment_images=self.augment_images)
-        data_point = {"support_set_images": support_set_images, "target_set_image": target_set_image,
-                      "support_set_labels": support_set_labels, "target_set_label": target_set_label}
-        return data_point
+
+        return support_set_images, target_set_image, support_set_labels, target_set_label, seed
 
     def reset_seed(self):
         self.seed = self.init_seed
@@ -550,6 +571,7 @@ class MetaLearningSystemDataLoader(object):
         self.batches_per_iter = args.samples_per_iter
         self.full_data_length = self.dataset.data_length
         self.continue_from_iter(current_iter=current_iter)
+        self.args = args
 
     def get_dataloader(self):
         """
@@ -580,10 +602,8 @@ class MetaLearningSystemDataLoader(object):
         self.dataset.set_augmentation(augment_images=augment_images)
         self.total_train_iters_produced += (self.num_of_gpus * self.batch_size * self.samples_per_iter)
         for sample_id, sample_batched in enumerate(self.get_dataloader()):
-            preprocess_sample = self.sample_iter_data(sample=sample_batched, num_gpus=self.dataset.num_of_gpus,
-                                                      samples_per_iter=self.batches_per_iter,
-                                                      batch_size=self.dataset.batch_size)
-            yield preprocess_sample
+            yield sample_batched
+
 
     def get_val_batches(self, total_batches=-1, augment_images=False):
         """
@@ -598,10 +618,8 @@ class MetaLearningSystemDataLoader(object):
         self.dataset.switch_set(set_name="val")
         self.dataset.set_augmentation(augment_images=augment_images)
         for sample_id, sample_batched in enumerate(self.get_dataloader()):
-            preprocess_sample = self.sample_iter_data(sample=sample_batched, num_gpus=self.dataset.num_of_gpus,
-                                                      samples_per_iter=self.batches_per_iter,
-                                                      batch_size=self.dataset.batch_size)
-            yield preprocess_sample
+            yield sample_batched
+
 
     def get_test_batches(self, total_batches=-1, augment_images=False):
         """
@@ -616,25 +634,5 @@ class MetaLearningSystemDataLoader(object):
         self.dataset.switch_set(set_name='test')
         self.dataset.set_augmentation(augment_images=augment_images)
         for sample_id, sample_batched in enumerate(self.get_dataloader()):
-            preprocess_sample = self.sample_iter_data(sample=sample_batched, num_gpus=self.dataset.num_of_gpus,
-                                                      samples_per_iter=self.batches_per_iter,
-                                                      batch_size=self.dataset.batch_size)
-            yield preprocess_sample
+            yield sample_batched
 
-    def sample_iter_data(self, sample, num_gpus, batch_size, samples_per_iter):
-        """
-        Given a dict containing batch of samples each of size (num_gpus * batch_size * samples_per_iter) +
-        (object_shape_tuple) will return
-        a list of samples each of size (num_gpus, batch_size, samples_per_iter) + (object_shape_tuple)
-        :param sample: A dictionary containing batches of samples
-        :param num_gpus: The number of gpus to use
-        :param batch_size: The batch size
-        :param samples_per_iter: The number of samples for each iterations
-        :return: A list of reshaped numpy arrays to match the shape
-        (num_gpus, batch_size, samples_per_iter) + (object_shape_tuple)
-        """
-        output_sample = []
-        for key in sample.keys():
-            _temp = np.array(sample[key].numpy(), dtype=np.float32)
-            output_sample.append(np.reshape(_temp, newshape=(num_gpus, samples_per_iter, batch_size) + _temp.shape[1:]))
-        return output_sample

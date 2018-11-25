@@ -62,7 +62,7 @@ class MetaConv2dLayer(nn.Module):
         self.use_bias = use_bias
         self.groups = int(groups)
         self.weight = nn.Parameter(torch.empty(num_filters, in_channels, kernel_size, kernel_size))
-        nn.init.normal_(self.weight)
+        nn.init.xavier_uniform_(self.weight)
 
         if self.use_bias:
             self.bias = nn.Parameter(torch.zeros(num_filters))
@@ -111,8 +111,7 @@ class MetaLinearLayer(nn.Module):
         # #print('input_shape', input_shape, b, c, num_filters)
         self.use_bias = use_bias
         self.weights = nn.Parameter(torch.ones(num_filters, c))
-        if not is_logits_layer:
-            nn.init.normal(self.weights)
+        nn.init.xavier_uniform_(self.weights)
         if self.use_bias:
             self.bias = nn.Parameter(torch.zeros(num_filters))
 
@@ -176,6 +175,8 @@ class MetaBatchNormLayer(nn.Module):
         self.device = device
         self.use_per_step_bn_statistics = use_per_step_bn_statistics
         self.args = args
+        self.learnable_gamma = self.args.learnable_bn_gamma
+        self.learnable_beta = self.args.learnable_bn_beta
 
         if use_per_step_bn_statistics:
             self.running_mean = nn.Parameter(torch.zeros(args.number_of_training_steps_per_iter, num_features),
@@ -183,22 +184,22 @@ class MetaBatchNormLayer(nn.Module):
             self.running_var = nn.Parameter(torch.ones(args.number_of_training_steps_per_iter, num_features),
                                             requires_grad=False)
             self.bias = nn.Parameter(torch.zeros(args.number_of_training_steps_per_iter, num_features),
-                                     requires_grad=True)
+                                     requires_grad=self.learnable_beta)
             self.weight = nn.Parameter(torch.ones(args.number_of_training_steps_per_iter, num_features),
-                                       requires_grad=True)
+                                       requires_grad=self.learnable_gamma)
         else:
             self.running_mean = nn.Parameter(torch.zeros(num_features), requires_grad=False)
             self.running_var = nn.Parameter(torch.zeros(num_features), requires_grad=False)
             self.bias = nn.Parameter(torch.zeros(num_features),
-                                     requires_grad=True)
+                                     requires_grad=self.learnable_beta)
             self.weight = nn.Parameter(torch.ones(num_features),
-                                       requires_grad=True)
+                                       requires_grad=self.learnable_gamma)
 
         if self.args.enable_inner_loop_optimizable_bn_params:
             self.bias = nn.Parameter(torch.zeros(num_features),
-                                     requires_grad=True)
+                                     requires_grad=self.learnable_beta)
             self.weight = nn.Parameter(torch.ones(num_features),
-                                       requires_grad=True)
+                                       requires_grad=self.learnable_gamma)
 
         self.backup_running_mean = torch.zeros(self.running_mean.shape)
         self.backup_running_var = torch.ones(self.running_var.shape)

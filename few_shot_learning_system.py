@@ -182,6 +182,7 @@ class MAMLFewShotClassifier(nn.Module):
 
         total_losses = []
         total_accuracies = []
+        per_task_target_preds = [[] for i in range(len(x_target_set))]
         self.classifier.zero_grad()
         for task_id, (x_support_set_task, y_support_set_task, x_target_set_task, y_target_set_task) in \
                 enumerate(zip(x_support_set,
@@ -192,6 +193,7 @@ class MAMLFewShotClassifier(nn.Module):
             task_accuracies = []
             per_step_loss_importance_vectors = self.get_per_step_loss_importance_vector()
             names_weights_copy = self.get_inner_loop_parameter_dict(self.classifier.named_parameters())
+
 
             n, s, c, h, w = x_target_set_task.shape
 
@@ -228,7 +230,7 @@ class MAMLFewShotClassifier(nn.Module):
                                                                      backup_running_statistics=False, training=True,
                                                                      num_step=num_step)
                         task_losses.append(target_loss)
-
+            per_task_target_preds[task_id] = target_preds.detach().cpu().numpy()
             _, predicted = torch.max(target_preds.data, 1)
             accuracy = list(predicted.eq(y_target_set_task.data).cpu())
             task_accuracies = np.mean(accuracy)
@@ -246,7 +248,7 @@ class MAMLFewShotClassifier(nn.Module):
         for idx, item in enumerate(per_step_loss_importance_vectors):
             losses['loss_importance_vector_{}'.format(idx)] = item.detach().cpu().numpy()
 
-        return losses
+        return losses, per_task_target_preds
 
     def net_forward(self, x, y, weights, backup_running_statistics, training, num_step):
         """
@@ -286,11 +288,11 @@ class MAMLFewShotClassifier(nn.Module):
         :param epoch: The index of the currrent epoch.
         :return: A dictionary of losses for the current step.
         """
-        losses = self.forward(data_batch=data_batch, epoch=epoch, use_second_order=self.args.second_order and
+        losses, per_task_target_preds = self.forward(data_batch=data_batch, epoch=epoch, use_second_order=self.args.second_order and
                                                                                    epoch > self.args.first_order_to_second_order_epoch,
                               use_multi_step_loss_optimization=self.args.use_multi_step_loss_optimization,
                               num_steps=self.args.number_of_training_steps_per_iter, training_phase=True)
-        return losses
+        return losses, per_task_target_preds
 
     def evaluation_forward_prop(self, data_batch, epoch):
         """
@@ -299,11 +301,11 @@ class MAMLFewShotClassifier(nn.Module):
         :param epoch: The index of the currrent epoch.
         :return: A dictionary of losses for the current step.
         """
-        losses = self.forward(data_batch=data_batch, epoch=epoch, use_second_order=False,
+        losses, per_task_target_preds = self.forward(data_batch=data_batch, epoch=epoch, use_second_order=False,
                               use_multi_step_loss_optimization=True,
                               num_steps=self.args.number_of_evaluation_steps_per_iter, training_phase=False)
 
-        return losses
+        return losses, per_task_target_preds
 
     def meta_update(self, loss):
         """
@@ -342,14 +344,14 @@ class MAMLFewShotClassifier(nn.Module):
 
         data_batch = (x_support_set, x_target_set, y_support_set, y_target_set)
 
-        losses = self.train_forward_prop(data_batch=data_batch, epoch=epoch)
+        losses, per_task_target_preds = self.train_forward_prop(data_batch=data_batch, epoch=epoch)
 
         self.meta_update(loss=losses['loss'])
         losses['learning_rate'] = self.scheduler.get_lr()[0]
         self.optimizer.zero_grad()
         self.zero_grad()
 
-        return losses
+        return losses, per_task_target_preds
 
     def run_validation_iter(self, data_batch):
         """
@@ -371,13 +373,13 @@ class MAMLFewShotClassifier(nn.Module):
 
         data_batch = (x_support_set, x_target_set, y_support_set, y_target_set)
 
-        losses = self.evaluation_forward_prop(data_batch=data_batch, epoch=self.current_epoch)
+        losses, per_task_target_preds = self.evaluation_forward_prop(data_batch=data_batch, epoch=self.current_epoch)
 
         # losses['loss'].backward() # uncomment if you get the weird memory error
         # self.zero_grad()
         # self.optimizer.zero_grad()
 
-        return losses
+        return losses, per_task_target_preds
 
     def save_model(self, model_save_dir, state):
         """

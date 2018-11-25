@@ -2,8 +2,9 @@ import tqdm
 import os
 import numpy as np
 import sys
-from utils.storage import build_experiment_folder, save_statistics
+from utils.storage import build_experiment_folder, save_statistics, save_to_json
 import time
+import torch
 
 
 class ExperimentBuilder(object):
@@ -32,7 +33,6 @@ class ExperimentBuilder(object):
         self.max_models_to_save = self.args.max_models_to_save
         self.create_summary_csv = False
 
-
         if self.args.continue_from_epoch == 'from_scratch':
             self.create_summary_csv = True
 
@@ -54,7 +54,6 @@ class ExperimentBuilder(object):
                                       model_idx=self.args.continue_from_epoch)
             self.start_epoch = int(self.state['current_iter'] / self.args.total_iter_per_epoch)
 
-
         self.data = data(args=args, current_iter=self.state['current_iter'])
 
         print("train_seed {}, val_seed: {}, at start time".format(self.data.dataset.seed["train"],
@@ -62,7 +61,7 @@ class ExperimentBuilder(object):
         self.total_epochs_before_pause = self.args.total_epochs_before_pause
         self.state['best_epoch'] = int(self.state['best_val_iter'] / self.args.total_iter_per_epoch)
         self.epoch = int(self.state['current_iter'] / self.args.total_iter_per_epoch)
-        self.augment_flag = True if 'omniglot' in self.args.dataset_name else False
+        self.augment_flag = True if 'omniglot' in self.args.dataset_name.lower() else False
         self.start_time = time.time()
         self.epochs_done_in_this_run = 0
         print(self.state['current_iter'], int(self.args.total_iter_per_epoch * self.args.total_epochs))
@@ -115,14 +114,14 @@ class ExperimentBuilder(object):
         :param pbar_train: The progress bar of the training.
         :return: Updates total_losses, train_losses, current_iter
         """
-        x_support_set, x_target_set, y_support_set, y_target_set = train_sample
-        data_batch = (x_support_set[0, 0], x_target_set[0, 0], y_support_set[0, 0], y_target_set[0, 0])
+        x_support_set, x_target_set, y_support_set, y_target_set, seed = train_sample
+        data_batch = (x_support_set, x_target_set, y_support_set, y_target_set)
 
         if sample_idx == 0:
-            print("shape of data", data_batch[0].shape, data_batch[1].shape, data_batch[2].shape,
-                  data_batch[3].shape)
+            print("shape of data", x_support_set.shape, x_target_set.shape, y_support_set.shape,
+                  y_target_set.shape)
 
-        losses = self.model.run_train_iter(data_batch=data_batch, epoch=epoch_idx)
+        losses, _ = self.model.run_train_iter(data_batch=data_batch, epoch=epoch_idx)
 
         for key, value in zip(list(losses.keys()), list(losses.values())):
             if key not in total_losses:
@@ -148,11 +147,11 @@ class ExperimentBuilder(object):
         :param pbar_val: The progress bar of the val stage.
         :return: The updated val_losses, total_losses
         """
-        x_support_set, x_target_set, y_support_set, y_target_set = val_sample
+        x_support_set, x_target_set, y_support_set, y_target_set, seed = val_sample
         data_batch = (
-            x_support_set[0, 0], x_target_set[0, 0], y_support_set[0, 0], y_target_set[0, 0])
+            x_support_set, x_target_set, y_support_set, y_target_set)
 
-        losses = self.model.run_validation_iter(data_batch=data_batch)
+        losses, _ = self.model.run_validation_iter(data_batch=data_batch)
         for key, value in zip(list(losses.keys()), list(losses.values())):
             if key not in total_losses:
                 total_losses[key] = [float(value)]
@@ -163,9 +162,34 @@ class ExperimentBuilder(object):
         val_output_update = self.build_loss_summary_string(losses)
 
         pbar_val.update(1)
-        pbar_val.set_description("{}_phase {} -> {}".format(phase, self.epoch, val_output_update))
+        pbar_val.set_description(
+            "val_phase {} -> {}".format(self.epoch, val_output_update))
 
         return val_losses, total_losses
+
+    def test_evaluation_iteration(self, val_sample, model_idx, sample_idx, per_model_per_batch_preds, pbar_test):
+        """
+        Runs a validation iteration, updates the progress bar and returns the total and current epoch val losses.
+        :param val_sample: A sample from the data provider
+        :param total_losses: The current total losses dictionary to be updated.
+        :param pbar_test: The progress bar of the val stage.
+        :return: The updated val_losses, total_losses
+        """
+        x_support_set, x_target_set, y_support_set, y_target_set, seed = val_sample
+        data_batch = (
+            x_support_set, x_target_set, y_support_set, y_target_set)
+
+        losses, per_task_preds = self.model.run_validation_iter(data_batch=data_batch)
+
+        per_model_per_batch_preds[model_idx].extend(list(per_task_preds))
+
+        test_output_update = self.build_loss_summary_string(losses)
+
+        pbar_test.update(1)
+        pbar_test.set_description(
+            "test_phase {} -> {}".format(self.epoch, test_output_update))
+
+        return per_model_per_batch_preds
 
     def save_models(self, model, epoch, state):
         """
@@ -185,7 +209,7 @@ class ExperimentBuilder(object):
 
         print("saved models to", self.saved_models_filepath)
 
-    def pack_and_save_metrics(self, start_time, create_summary_csv, train_losses, val_losses):
+    def pack_and_save_metrics(self, start_time, create_summary_csv, train_losses, val_losses, state):
         """
         Given current epochs start_time, train losses, val losses and whether to create a new stats csv file, pack stats
         and save into a statistics csv file. Return a new start time for the new epoch.
@@ -197,6 +221,17 @@ class ExperimentBuilder(object):
         :return: The current time, to be used for the next epoch.
         """
         epoch_summary_losses = self.merge_two_dicts(first_dict=train_losses, second_dict=val_losses)
+
+        if 'per_epoch_statistics' not in state:
+            state['per_epoch_statistics'] = dict()
+
+        for key, value in epoch_summary_losses.items():
+
+            if key not in state['per_epoch_statistics']:
+                state['per_epoch_statistics'][key] = [value]
+            else:
+                state['per_epoch_statistics'][key].append(value)
+
         epoch_summary_string = self.build_loss_summary_string(epoch_summary_losses)
         epoch_summary_losses["epoch"] = self.epoch
         epoch_summary_losses['epoch_run_time'] = time.time() - start_time
@@ -211,7 +246,62 @@ class ExperimentBuilder(object):
 
         self.summary_statistics_filepath = save_statistics(self.logs_filepath,
                                                            list(epoch_summary_losses.values()))
-        return start_time
+        return start_time, state
+
+    def evaluated_test_set_using_the_best_models(self, top_n_models):
+        per_epoch_statistics = self.state['per_epoch_statistics']
+        val_acc = np.copy(per_epoch_statistics['val_accuracy_mean'])
+        val_idx = np.array([i for i in range(len(val_acc))])
+        sorted_idx = np.argsort(val_acc, axis=0).astype(dtype=np.int32)[::-1][:top_n_models]
+
+        sorted_val_acc = val_acc[sorted_idx]
+        val_idx = val_idx[sorted_idx]
+        print(sorted_idx)
+        print(sorted_val_acc)
+
+        top_n_idx = val_idx[:top_n_models]
+        per_model_per_batch_preds = [[] for i in range(top_n_models)]
+        per_model_per_batch_targets = [[] for i in range(top_n_models)]
+        test_losses = [dict() for i in range(top_n_models)]
+        for idx, model_idx in enumerate(top_n_idx):
+            self.state = \
+                self.model.load_model(model_save_dir=self.saved_models_filepath, model_name="train_model",
+                                      model_idx=model_idx + 1)
+            with tqdm.tqdm(total=int(self.args.num_evaluation_tasks / self.args.batch_size)) as pbar_test:
+                for sample_idx, test_sample in enumerate(
+                        self.data.get_test_batches(total_batches=int(self.args.num_evaluation_tasks / self.args.batch_size),
+                                                   augment_images=False)):
+                    #print(test_sample[4])
+                    per_model_per_batch_targets[idx].extend(np.array(test_sample[3]))
+                    per_model_per_batch_preds = self.test_evaluation_iteration(val_sample=test_sample,
+                                                                               sample_idx=sample_idx,
+                                                                               model_idx=idx,
+                                                                               per_model_per_batch_preds=per_model_per_batch_preds,
+                                                                               pbar_test=pbar_test)
+        # for i in range(top_n_models):
+        #     print("test assertion", 0)
+        #     print(per_model_per_batch_targets[0], per_model_per_batch_targets[i])
+        #     assert np.equal(np.array(per_model_per_batch_targets[0]), np.array(per_model_per_batch_targets[i]))
+
+        per_batch_preds = np.mean(per_model_per_batch_preds, axis=0)
+        #print(per_batch_preds.shape)
+        per_batch_max = np.argmax(per_batch_preds, axis=2)
+        per_batch_targets = np.array(per_model_per_batch_targets[0]).reshape(per_batch_max.shape)
+        #print(per_batch_max)
+        accuracy = np.mean(np.equal(per_batch_targets, per_batch_max))
+        accuracy_std = np.std(np.equal(per_batch_targets, per_batch_max))
+
+        test_losses = {"test_accuracy_mean": accuracy, "test_accuracy_std": accuracy_std}
+
+        _ = save_statistics(self.logs_filepath,
+                            list(test_losses.keys()),
+                            create=True, filename="test_summary.csv")
+
+        summary_statistics_filepath = save_statistics(self.logs_filepath,
+                                                      list(test_losses.values()),
+                                                      create=False, filename="test_summary.csv")
+        print(test_losses)
+        print("saved test performance at", summary_statistics_filepath)
 
     def run_experiment(self):
         """
@@ -221,7 +311,7 @@ class ExperimentBuilder(object):
         with tqdm.tqdm(initial=self.state['current_iter'],
                        total=int(self.args.total_iter_per_epoch * self.args.total_epochs)) as pbar_train:
 
-            while self.state['current_iter'] < (self.args.total_epochs * self.args.total_iter_per_epoch):
+            while (self.state['current_iter'] < (self.args.total_epochs * self.args.total_iter_per_epoch)) and (self.args.evaluate_on_test_set_only == False):
 
                 for train_sample_idx, train_sample in enumerate(
                         self.data.get_train_batches(total_batches=int(self.args.total_iter_per_epoch *
@@ -239,12 +329,12 @@ class ExperimentBuilder(object):
                         sample_idx=self.state['current_iter'])
 
                     if self.state['current_iter'] % self.args.total_iter_per_epoch == 0:
-                        better_val_model = False
+
                         total_losses = dict()
                         val_losses = dict()
-                        with tqdm.tqdm(total=self.args.total_iter_per_epoch) as pbar_val:
+                        with tqdm.tqdm(total=int(self.args.num_evaluation_tasks / self.args.batch_size)) as pbar_val:
                             for _, val_sample in enumerate(
-                                    self.data.get_val_batches(total_batches=int(self.args.total_iter_per_epoch),
+                                    self.data.get_val_batches(total_batches=int(self.args.num_evaluation_tasks / self.args.batch_size),
                                                               augment_images=False)):
                                 val_losses, total_losses = self.evaluation_iteration(val_sample=val_sample,
                                                                                      total_losses=total_losses,
@@ -256,43 +346,30 @@ class ExperimentBuilder(object):
                                 self.state['best_val_iter'] = self.state['current_iter']
                                 self.state['best_epoch'] = int(
                                     self.state['best_val_iter'] / self.args.total_iter_per_epoch)
-                                better_val_model = True
+
 
                         self.epoch += 1
                         self.state = self.merge_two_dicts(first_dict=self.merge_two_dicts(first_dict=self.state,
                                                                                           second_dict=train_losses),
                                                           second_dict=val_losses)
+
                         self.save_models(model=self.model, epoch=self.epoch, state=self.state)
 
-                        self.start_time = self.pack_and_save_metrics(start_time=self.start_time,
-                                                                     create_summary_csv=self.create_summary_csv,
-                                                                     train_losses=train_losses, val_losses=val_losses)
+                        self.start_time, self.state = self.pack_and_save_metrics(start_time=self.start_time,
+                                                                                 create_summary_csv=self.create_summary_csv,
+                                                                                 train_losses=train_losses,
+                                                                                 val_losses=val_losses,
+                                                                                 state=self.state)
 
                         self.total_losses = dict()
 
                         self.epochs_done_in_this_run += 1
 
-                        if self.epoch % 1 == 0 and better_val_model:
-                            total_losses = dict()
-                            test_losses = dict()
-                            with tqdm.tqdm(total=self.args.total_iter_per_epoch) as pbar_test:
-                                for _, test_sample in enumerate(
-                                        self.data.get_test_batches(total_batches=int(self.args.total_iter_per_epoch),
-                                                                   augment_images=False)):
-                                    test_losses, total_losses = self.evaluation_iteration(val_sample=test_sample,
-                                                                                          total_losses=total_losses,
-                                                                                          pbar_val=pbar_test, phase='test')
-
-                            _ = save_statistics(self.logs_filepath,
-                                                                          list(test_losses.keys()),
-                                                                          create=True, filename="test_summary.csv")
-                            summary_statistics_filepath = save_statistics(self.logs_filepath,
-                                                                          list(test_losses.values()),
-                                                                          create=False, filename="test_summary.csv")
-
-                            print("saved test performance at", summary_statistics_filepath)
+                        save_to_json(filename=os.path.join(self.logs_filepath, "summary_statistics.json"),
+                                     dict_to_store=self.state['per_epoch_statistics'])
 
                         if self.epochs_done_in_this_run >= self.total_epochs_before_pause:
                             print("train_seed {}, val_seed: {}, at pause time".format(self.data.dataset.seed["train"],
                                                                                       self.data.dataset.seed["val"]))
                             sys.exit()
+            self.evaluated_test_set_using_the_best_models(top_n_models=3)
