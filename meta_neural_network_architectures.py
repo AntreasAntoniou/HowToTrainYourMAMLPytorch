@@ -689,5 +689,4 @@ class VGGLeakyReLUNormNetwork(nn.Module):
         for i in range(self.num_stages):
             self.layer_dict['conv{}'.format(i)].restore_backup_stats()
 
-        if self.args.norm_layer == "batch_norm":
-            self.layer_dict['fc_norm_layer'].restore_backup_stats()
+
