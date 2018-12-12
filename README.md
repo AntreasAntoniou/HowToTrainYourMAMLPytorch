@@ -132,7 +132,7 @@ Note: By downloading and using the mini-imagenet datasets, you accept terms and 
 
 To run an experiment from the paper on Mini-Imagenet:
 1. Activate your conda environment ```conda activate pytorch_meta_learning_env```
-2. Download the mini_imagenet dataset from the [gdrive folder](https://drive.google.com/file/d/1ljP5AaiwZoS6LmEx6UquG_UScUaUd4-m/view?usp=sharing)
+2. Download the mini_imagenet dataset from the [mini_imagenet gdrive folder](https://drive.google.com/file/d/1qQCoGoEJKUCQkk8roncWH7rhPN7aMfBr/view?usp=sharing)
 3. copy the .pbzip file in datasets
 4. cd experiment_scripts
 5. Find which experiment you want to run.
