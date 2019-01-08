@@ -384,7 +384,7 @@ class MetaConvNormLayerReLU(nn.Module):
 
             out = self.norm_layer(out, num_step=0)
 
-        out = F.leaky_relu(out)
+        out = F.relu(out)
 
         print(out.shape)
 
@@ -427,9 +427,7 @@ class MetaConvNormLayerReLU(nn.Module):
                                           params=batch_norm_params, training=training,
                                           backup_running_statistics=backup_running_statistics)
 
-        #out = self.layer_dict['activation_function_pre'].forward(out, num_step=num_step)
-        #out = self.layer_dict['activation_function_pre'].forward(out, num_step=num_step)
-        out = F.leaky_relu(out)
+        out = F.relu(out)
 
         return out
 
@@ -496,7 +494,7 @@ class MetaNormLayerConvReLU(nn.Module):
                                     stride=self.stride, padding=self.padding, use_bias=self.use_bias)
 
 
-        self.layer_dict['activation_function_pre'] = nn.LeakyReLU()
+        self.layer_dict['activation_function_pre'] = nn.ReLU()
 
 
         out = self.layer_dict['activation_function_pre'].forward(self.conv.forward(out))
@@ -549,7 +547,7 @@ class MetaNormLayerConvReLU(nn.Module):
             self.norm_layer.restore_backup_stats()
 
 
-class VGGLeakyReLUNormNetwork(nn.Module):
+class VGGReLUNormNetwork(nn.Module):
     def __init__(self, im_shape, num_output_classes, args, device, meta_classifier=True):
         """
         Builds a multilayer convolutional network. It also provides functionality for passing external parameters to be
@@ -561,7 +559,7 @@ class VGGLeakyReLUNormNetwork(nn.Module):
         :param meta_classifier: A flag indicating whether the system's meta-learning (inner-loop) functionalities should
         be enabled.
         """
-        super(VGGLeakyReLUNormNetwork, self).__init__()
+        super(VGGReLUNormNetwork, self).__init__()
         b, c, self.h, self.w = im_shape
         self.device = device
         self.total_layers = 0
