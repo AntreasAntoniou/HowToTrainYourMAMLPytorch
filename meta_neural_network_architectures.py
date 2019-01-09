@@ -1,15 +1,11 @@
 import numbers
-from collections import OrderedDict
 from copy import copy
 
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
 import numpy as np
-from torch.autograd import Function
-from torch.optim import Adam
 
-from utils.parser_utils import get_args
 
 
 def extract_top_level_dict(current_dict):
@@ -384,7 +380,7 @@ class MetaConvNormLayerReLU(nn.Module):
 
             out = self.norm_layer(out, num_step=0)
 
-        out = F.relu(out)
+        out = F.leaky_relu(out)
 
         print(out.shape)
 
@@ -427,7 +423,7 @@ class MetaConvNormLayerReLU(nn.Module):
                                           params=batch_norm_params, training=training,
                                           backup_running_statistics=backup_running_statistics)
 
-        out = F.relu(out)
+        out = F.leaky_relu(out)
 
         return out
 
@@ -494,7 +490,7 @@ class MetaNormLayerConvReLU(nn.Module):
                                     stride=self.stride, padding=self.padding, use_bias=self.use_bias)
 
 
-        self.layer_dict['activation_function_pre'] = nn.ReLU()
+        self.layer_dict['activation_function_pre'] = nn.LeakyReLU()
 
 
         out = self.layer_dict['activation_function_pre'].forward(self.conv.forward(out))

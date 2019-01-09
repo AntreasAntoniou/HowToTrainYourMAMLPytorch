@@ -1,22 +1,12 @@
-from copy import deepcopy
+import os
+
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
-import torch.backends.cudnn as cudnn
-import torchvision
-import torchvision.transforms as transforms
-import os
-import sys
-import time
-import argparse
-import datetime
-
-from PIL import Image
+import torch.optim as optim
 
 from meta_neural_network_architectures import VGGReLUNormNetwork
-from torch.autograd import Variable
-import numpy as np
 
 
 def set_torch_seed(seed):
@@ -194,7 +184,6 @@ class MAMLFewShotClassifier(nn.Module):
             per_step_loss_importance_vectors = self.get_per_step_loss_importance_vector()
             names_weights_copy = self.get_inner_loop_parameter_dict(self.classifier.named_parameters())
 
-
             n, s, c, h, w = x_target_set_task.shape
 
             x_support_set_task = x_support_set_task.view(-1, c, h, w)
@@ -288,10 +277,12 @@ class MAMLFewShotClassifier(nn.Module):
         :param epoch: The index of the currrent epoch.
         :return: A dictionary of losses for the current step.
         """
-        losses, per_task_target_preds = self.forward(data_batch=data_batch, epoch=epoch, use_second_order=self.args.second_order and
-                                                                                   epoch > self.args.first_order_to_second_order_epoch,
-                              use_multi_step_loss_optimization=self.args.use_multi_step_loss_optimization,
-                              num_steps=self.args.number_of_training_steps_per_iter, training_phase=True)
+        losses, per_task_target_preds = self.forward(data_batch=data_batch, epoch=epoch,
+                                                     use_second_order=self.args.second_order and
+                                                                      epoch > self.args.first_order_to_second_order_epoch,
+                                                     use_multi_step_loss_optimization=self.args.use_multi_step_loss_optimization,
+                                                     num_steps=self.args.number_of_training_steps_per_iter,
+                                                     training_phase=True)
         return losses, per_task_target_preds
 
     def evaluation_forward_prop(self, data_batch, epoch):
@@ -302,8 +293,9 @@ class MAMLFewShotClassifier(nn.Module):
         :return: A dictionary of losses for the current step.
         """
         losses, per_task_target_preds = self.forward(data_batch=data_batch, epoch=epoch, use_second_order=False,
-                              use_multi_step_loss_optimization=True,
-                              num_steps=self.args.number_of_evaluation_steps_per_iter, training_phase=False)
+                                                     use_multi_step_loss_optimization=True,
+                                                     num_steps=self.args.number_of_evaluation_steps_per_iter,
+                                                     training_phase=False)
 
         return losses, per_task_target_preds
 
@@ -317,7 +309,7 @@ class MAMLFewShotClassifier(nn.Module):
         if 'imagenet' in self.args.dataset_name:
             for name, param in self.classifier.named_parameters():
                 if param.requires_grad:
-                    param.grad.data.clamp_(-10, 10) # not sure if this is necessary, more experiments are needed
+                    param.grad.data.clamp_(-10, 10)  # not sure if this is necessary, more experiments are needed
         self.optimizer.step()
 
     def run_train_iter(self, data_batch, epoch):
