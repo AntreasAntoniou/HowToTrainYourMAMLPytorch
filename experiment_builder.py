@@ -372,4 +372,4 @@ class ExperimentBuilder(object):
                             print("train_seed {}, val_seed: {}, at pause time".format(self.data.dataset.seed["train"],
                                                                                       self.data.dataset.seed["val"]))
                             sys.exit()
-            self.evaluated_test_set_using_the_best_models(top_n_models=3)
+            self.evaluated_test_set_using_the_best_models(top_n_models=5)
