@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import os
 
 import numpy as np
@@ -99,7 +100,7 @@ class MAMLFewShotClassifier(nn.Module):
         :param params: A dictionary of the network's parameters.
         :return: A dictionary of the parameters to use for the inner loop optimization process.
         """
-        param_dict = dict()
+        param_dict = OrderedDict()
         for name, param in params:
             if param.requires_grad:
                 if self.args.enable_inner_loop_optimizable_bn_params:
@@ -130,7 +131,7 @@ class MAMLFewShotClassifier(nn.Module):
                                                            grads.to(device=self.device)),
             names_weights_copy.values(), self.task_learning_rate[current_step_idx], grads))
 
-        names_weights_copy = dict(zip(names_weights_copy.keys(), updated_weights))
+        names_weights_copy = OrderedDict(zip(names_weights_copy.keys(), updated_weights))
 
         return names_weights_copy
 
