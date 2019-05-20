@@ -211,7 +211,6 @@ class MAMLFewShotClassifier(nn.Module):
             _, predicted = torch.max(target_preds.data, 1)
 
             accuracy = predicted.float().eq(y_target_set_task.data.float()).cpu().float()
-            #task_accuracies = np.mean(accuracy)
             task_losses = torch.sum(torch.stack(task_losses))
             total_losses.append(task_losses)
             total_accuracies.extend(accuracy)

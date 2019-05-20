@@ -13,7 +13,7 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/script_generation_tools/generate_configs.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="471">
+            <state relative-caret-position="1065">
               <caret line="71" column="60" selection-start-line="71" selection-start-column="60" selection-end-line="71" selection-end-column="60" />
               <folding>
                 <element signature="e#0#9#0" expanded="true" />
@@ -22,15 +22,10 @@
           </provider>
         </entry>
       </file>
-      <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/experiment_scripts/omniglot_maml++-omniglot_1_8_0.1_64_5_0_few_shot.sh">
-          <provider selected="true" editor-type-id="text-editor" />
-        </entry>
-      </file>
-      <file pinned="false" current-in-tab="false">
+      <file pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/few_shot_learning_system.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="567">
+            <state relative-caret-position="342">
               <caret line="212" column="89" selection-start-line="212" selection-start-column="89" selection-end-line="212" selection-end-column="89" />
               <folding>
                 <element signature="e#0#9#0" expanded="true" />
@@ -42,7 +37,7 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/experiment_builder.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="150">
+            <state relative-caret-position="-210">
               <caret line="10" column="38" selection-start-line="10" selection-start-column="38" selection-end-line="10" selection-end-column="38" />
               <folding>
                 <element signature="e#0#11#0" expanded="true" />
@@ -72,7 +67,7 @@
           </provider>
         </entry>
       </file>
-      <file pinned="false" current-in-tab="true">
+      <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/experiment_template_config/mini-imagenet_maml++.json">
           <provider selected="true" editor-type-id="text-editor">
             <state relative-caret-position="555">
@@ -145,9 +140,9 @@
         <option value="$PROJECT_DIR$/experiment_template_config/omniglot_maml++.json" />
         <option value="$PROJECT_DIR$/experiment_template_config/mini-imagenet_maml.json" />
         <option value="$PROJECT_DIR$/experiment_template_config/omniglot_maml.json" />
-        <option value="$PROJECT_DIR$/few_shot_learning_system.py" />
         <option value="$PROJECT_DIR$/script_generation_tools/generate_configs.py" />
         <option value="$PROJECT_DIR$/experiment_template_config/mini-imagenet_maml++.json" />
+        <option value="$PROJECT_DIR$/few_shot_learning_system.py" />
       </list>
     </option>
   </component>
@@ -214,7 +209,7 @@
       </list>
     </option>
   </component>
-  <component name="RunManager" selected="Python.generate_configs">
+  <component name="RunManager" selected="Python.generate_scripts">
     <configuration name="generate_configs" type="PythonConfigurationType" factoryName="Python" temporary="true">
       <module name="HowToTrainYourMAMLPytorch" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -259,8 +254,8 @@
     </configuration>
     <recent_temporary>
       <list>
-        <item itemvalue="Python.generate_configs" />
         <item itemvalue="Python.generate_scripts" />
+        <item itemvalue="Python.generate_configs" />
       </list>
     </recent_temporary>
   </component>
@@ -281,12 +276,12 @@
     <frame x="65" y="-4" width="2495" height="1444" extended-state="6" />
     <editor active="true" />
     <layout>
-      <window_info active="true" content_ui="combo" id="Project" order="0" visible="true" weight="0.25153124" />
+      <window_info content_ui="combo" id="Project" order="0" visible="true" weight="0.25153124" />
       <window_info id="Structure" order="1" side_tool="true" weight="0.25" />
       <window_info id="Favorites" order="2" side_tool="true" />
       <window_info anchor="bottom" id="Message" order="0" />
       <window_info anchor="bottom" id="Find" order="1" />
-      <window_info anchor="bottom" id="Run" order="2" visible="true" weight="0.32811335" />
+      <window_info active="true" anchor="bottom" id="Run" order="2" visible="true" weight="0.32811335" />
       <window_info anchor="bottom" id="Debug" order="3" weight="0.4" />
       <window_info anchor="bottom" id="Cvs" order="4" weight="0.25" />
       <window_info anchor="bottom" id="Inspection" order="5" weight="0.4" />
@@ -376,16 +371,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/experiment_builder.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="150">
-          <caret line="10" column="38" selection-start-line="10" selection-start-column="38" selection-end-line="10" selection-end-column="38" />
-          <folding>
-            <element signature="e#0#11#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/train_maml_system.py">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="120">
@@ -427,19 +412,26 @@
     <entry file="file://$PROJECT_DIR$/experiment_scripts/omniglot_maml++-omniglot_1_8_0.1_64_5_0_few_shot.sh">
       <provider selected="true" editor-type-id="text-editor" />
     </entry>
-    <entry file="file://$PROJECT_DIR$/few_shot_learning_system.py">
+    <entry file="file://$PROJECT_DIR$/experiment_template_config/mini-imagenet_maml++.json">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="567">
-          <caret line="212" column="89" selection-start-line="212" selection-start-column="89" selection-end-line="212" selection-end-column="89" />
+        <state relative-caret-position="555">
+          <caret line="37" column="64" selection-start-line="37" selection-start-column="64" selection-end-line="37" selection-end-column="64" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experiment_builder.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="-210">
+          <caret line="10" column="38" selection-start-line="10" selection-start-column="38" selection-end-line="10" selection-end-column="38" />
           <folding>
-            <element signature="e#0#9#0" expanded="true" />
+            <element signature="e#0#11#0" expanded="true" />
           </folding>
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/script_generation_tools/generate_configs.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="471">
+        <state relative-caret-position="1065">
           <caret line="71" column="60" selection-start-line="71" selection-start-column="60" selection-end-line="71" selection-end-column="60" />
           <folding>
             <element signature="e#0#9#0" expanded="true" />
@@ -447,10 +439,13 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/experiment_template_config/mini-imagenet_maml++.json">
+    <entry file="file://$PROJECT_DIR$/few_shot_learning_system.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="555">
-          <caret line="37" column="64" selection-start-line="37" selection-start-column="64" selection-end-line="37" selection-end-column="64" />
+        <state relative-caret-position="342">
+          <caret line="212" column="89" selection-start-line="212" selection-start-column="89" selection-end-line="212" selection-end-column="89" />
+          <folding>
+            <element signature="e#0#9#0" expanded="true" />
+          </folding>
         </state>
       </provider>
     </entry>
