@@ -1,9 +1,11 @@
-import argparse
-import os
-import torch
-import json
+from torch import cuda
+
 
 def get_args():
+    import argparse
+    import os
+    import torch
+    import json
     parser = argparse.ArgumentParser(description='Welcome to the MAML++ training and inference system')
 
     parser.add_argument('--batch_size', nargs="?", type=int, default=32, help='Batch_size for experiment')
@@ -78,7 +80,7 @@ def get_args():
 
     if args.use_cuda:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_to_use)
-        device = torch.device('cuda')
+        device = cuda.current_device()
     else:
         device = torch.device('cpu')
 
@@ -91,6 +93,7 @@ class Bunch(object):
     self.__dict__.update(adict)
 
 def extract_args_from_json(json_file_path, args_dict):
+    import json
     summary_filename = json_file_path
     with open(summary_filename) as f:
         summary_dict = json.load(fp=f)

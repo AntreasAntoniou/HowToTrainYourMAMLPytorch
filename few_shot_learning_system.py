@@ -7,6 +7,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 from meta_neural_network_architectures import VGGReLUNormNetwork
+from inner_loop_optimizers import LSLRGradientDescentLearningRule
 
 
 def set_torch_seed(seed):
@@ -44,28 +45,26 @@ class MAMLFewShotClassifier(nn.Module):
                                              args=args, device=device, meta_classifier=True).to(device=self.device)
         self.task_learning_rate = args.task_learning_rate
 
-        names_weights_copy = self.get_inner_loop_parameter_dict(self.classifier.named_parameters())
-        self.task_learning_rate = nn.Parameter(
-            data=self.args.init_inner_loop_learning_rate * torch.ones(
-                (self.args.number_of_training_steps_per_iter, len(names_weights_copy.keys()))),
-            requires_grad=self.args.learnable_per_layer_per_step_inner_loop_learning_rate)
-
-        self.task_learning_rate.to(device=self.device)
-
-        task_name_params = self.get_inner_loop_parameter_dict(self.named_parameters())
+        self.inner_loop_optimizer = LSLRGradientDescentLearningRule(device=device,
+                                                                    init_learning_rate=self.task_learning_rate,
+                                                                    total_num_inner_loop_steps=self.args.number_of_training_steps_per_iter,
+                                                                    use_learnable_learning_rates=self.args.learnable_per_layer_per_step_inner_loop_learning_rate)
+        self.inner_loop_optimizer.initialise(
+            names_weights_dict=self.get_inner_loop_parameter_dict(params=self.classifier.named_parameters()))
 
         print("Inner Loop parameters")
-        for key, value in task_name_params.items():
+        for key, value in self.inner_loop_optimizer.named_parameters():
             print(key, value.shape)
 
         self.use_cuda = args.use_cuda
         self.device = device
         self.args = args
-
+        self.to(device)
         print("Outer Loop parameters")
         for name, param in self.named_parameters():
             if param.requires_grad:
-                print(name, param.shape)
+                print(name, param.shape, param.device, param.requires_grad)
+
 
         self.optimizer = optim.Adam(self.trainable_parameters(), lr=args.meta_learning_rate, amsgrad=False)
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer=self.optimizer, T_max=self.args.total_epochs,
@@ -121,34 +120,22 @@ class MAMLFewShotClassifier(nn.Module):
         :return: A dictionary with the updated weights (name, param)
         """
         self.classifier.zero_grad(names_weights_copy)
+
         grads = torch.autograd.grad(loss, names_weights_copy.values(),
                                     create_graph=use_second_order)
+        names_grads_wrt_params = dict(zip(names_weights_copy.keys(), grads))
 
-        updated_weights = list(map(
-            lambda current_params, learning_rates, grads: current_params.to(device=self.device) -
-                                                          (learning_rates.to(device=self.device) *
-                                                           grads.to(device=self.device)),
-            names_weights_copy.values(), self.task_learning_rate[current_step_idx], grads))
-
-        names_weights_copy = dict(zip(names_weights_copy.keys(), updated_weights))
+        names_weights_copy = self.inner_loop_optimizer.update_params(names_weights_dict=names_weights_copy,
+                                                                     names_grads_wrt_params_dict=names_grads_wrt_params,
+                                                                     num_step=current_step_idx)
 
         return names_weights_copy
 
-    def get_across_task_loss_metrics(self, total_losses, total_accuracies, names_weights_copy):
+    def get_across_task_loss_metrics(self, total_losses, total_accuracies):
         losses = dict()
 
-        losses['loss'] = torch.sum(torch.stack(total_losses))
+        losses['loss'] = torch.mean(torch.stack(total_losses))
         losses['accuracy'] = np.mean(total_accuracies)
-        names_weights = list(names_weights_copy.keys())
-
-        if len(self.task_learning_rate.shape) > 1:
-            for idx_num_step, learning_rate_num_step in enumerate(self.task_learning_rate):
-                for idx, learning_rate in enumerate(learning_rate_num_step):
-                    losses['task_learning_rate_num_step_{}_{}'.format(idx_num_step,
-                                                                      names_weights[
-                                                                          idx])] = learning_rate.detach().cpu().numpy()
-        else:
-            losses['task_learning_rate'] = self.task_learning_rate.detach().cpu().numpy()[0]
 
         return losses
 
@@ -219,20 +206,21 @@ class MAMLFewShotClassifier(nn.Module):
                                                                      backup_running_statistics=False, training=True,
                                                                      num_step=num_step)
                         task_losses.append(target_loss)
+
             per_task_target_preds[task_id] = target_preds.detach().cpu().numpy()
             _, predicted = torch.max(target_preds.data, 1)
-            accuracy = list(predicted.eq(y_target_set_task.data).cpu())
-            task_accuracies = np.mean(accuracy)
+
+            accuracy = predicted.float().eq(y_target_set_task.data.float()).cpu().float()
+            #task_accuracies = np.mean(accuracy)
             task_losses = torch.sum(torch.stack(task_losses))
             total_losses.append(task_losses)
-            total_accuracies.append(task_accuracies)
+            total_accuracies.extend(accuracy)
 
             if not training_phase:
                 self.classifier.restore_backup_stats()
 
         losses = self.get_across_task_loss_metrics(total_losses=total_losses,
-                                                   total_accuracies=total_accuracies,
-                                                   names_weights_copy=names_weights_copy)
+                                                   total_accuracies=total_accuracies)
 
         for idx, item in enumerate(per_step_loss_importance_vectors):
             losses['loss_importance_vector_{}'.format(idx)] = item.detach().cpu().numpy()

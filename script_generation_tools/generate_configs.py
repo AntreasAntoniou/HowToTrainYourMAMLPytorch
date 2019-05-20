@@ -1,6 +1,13 @@
 import os
 from collections import namedtuple
+
+from utils.parser_utils import Bunch
+
 seed_list = [0, 1, 2]
+
+hyper_config = namedtuple('hyperconfig', 'num_samples_per_class_range '
+                                         'batch_size_range '
+                                         'init_inner_loop_learning_rate_range num_filters num_classes_range')
 
 config = namedtuple('config', 'dataset_name num_classes '
                               'samples_per_class '
@@ -8,60 +15,76 @@ config = namedtuple('config', 'dataset_name num_classes '
                               'batch_size '
                               'train_update_steps '
                               'val_update_steps '
-                              'inner_learning_rate')
+                              'init_inner_loop_learning_rate '
+                              'load_into_memory '
+                              'learnable_bn_beta '
+                              'learnable_bn_gamma '
+                              'conv_padding '
+                              'num_filters '
+                              'experiment_name ')
 
-configs_list = [config(dataset_name="omniglot", num_classes=20, samples_per_class=1, target_samples_per_class=1,
-                       batch_size=16, train_update_steps=5, val_update_steps=5, inner_learning_rate=0.1),
-                config(dataset_name="omniglot", num_classes=20, samples_per_class=1, target_samples_per_class=1,
-                       batch_size=16, train_update_steps=1, val_update_steps=1, inner_learning_rate=0.1),
-                config(dataset_name="omniglot", num_classes=20, samples_per_class=1, target_samples_per_class=1,
-                       batch_size=16, train_update_steps=2, val_update_steps=2, inner_learning_rate=0.1),
-                config(dataset_name="omniglot", num_classes=20, samples_per_class=1, target_samples_per_class=1,
-                       batch_size=16, train_update_steps=3, val_update_steps=3, inner_learning_rate=0.1),
-                config(dataset_name="omniglot", num_classes=20, samples_per_class=1, target_samples_per_class=1,
-                       batch_size=16, train_update_steps=4, val_update_steps=4, inner_learning_rate=0.1),
+configs_list = []
 
-                config(dataset_name="omniglot", num_classes=20, samples_per_class=5, target_samples_per_class=1,
-                       batch_size=8, train_update_steps=5, val_update_steps=5, inner_learning_rate=0.1),
-
-                config(dataset_name="omniglot", num_classes=5, samples_per_class=1, target_samples_per_class=1,
-                       batch_size=16, train_update_steps=5, val_update_steps=5, inner_learning_rate=0.1),
-                config(dataset_name="omniglot", num_classes=5, samples_per_class=5, target_samples_per_class=1,
-                       batch_size=8, train_update_steps=5, val_update_steps=5, inner_learning_rate=0.1),
-
-                config(dataset_name="mini_imagenet", num_classes=5, samples_per_class=1, target_samples_per_class=15,
-                       batch_size=4, train_update_steps=5, val_update_steps=5, inner_learning_rate=0.01),
-                config(dataset_name="mini_imagenet", num_classes=5, samples_per_class=1, target_samples_per_class=15,
-                       batch_size=4, train_update_steps=1, val_update_steps=1, inner_learning_rate=0.01),
-                config(dataset_name="mini_imagenet", num_classes=5, samples_per_class=1, target_samples_per_class=15,
-                       batch_size=4, train_update_steps=2, val_update_steps=2, inner_learning_rate=0.01),
-                config(dataset_name="mini_imagenet", num_classes=5, samples_per_class=1, target_samples_per_class=15,
-                       batch_size=4, train_update_steps=3, val_update_steps=3, inner_learning_rate=0.01),
-                config(dataset_name="mini_imagenet", num_classes=5, samples_per_class=1, target_samples_per_class=15,
-                       batch_size=4, train_update_steps=4, val_update_steps=4, inner_learning_rate=0.01),
-
-                config(dataset_name="mini_imagenet", num_classes=5, samples_per_class=5, target_samples_per_class=15,
-                       batch_size=2, train_update_steps=5, val_update_steps=5, inner_learning_rate=0.01)]
+hyper_config_dict = {'omniglot': hyper_config(num_samples_per_class_range=[1, 5], num_classes_range=[20, 5],
+                                              batch_size_range=[8], init_inner_loop_learning_rate_range=[0.1],
+                                              num_filters=[64]),
+                     'mini-imagenet': hyper_config(num_samples_per_class_range=[1, 5],
+                                                   batch_size_range=[2], init_inner_loop_learning_rate_range=[0.01],
+                                                   num_classes_range=[5], num_filters=[48])
+                     }
 
 
+def generate_combinations(config):
+    combos = []
 
+    for key, item in config._asdict().items():
+        if len(combos) == 0:
+            combos = [[i] for i in item]
+        else:
+            combos = [combo + [choice] for combo in combos for choice in item]
+
+    named_configs = []
+    key_list = config._asdict().keys()
+    key_list = list(key_list)
+
+    for combo in combos:
+        temp_dict = dict()
+        for j in range(len(combo)):
+            temp_dict[key_list[j].replace('_range', '')] = combo[j]
+        named_configs.append(temp_dict)
+    return named_configs
+
+
+for seed in seed_list:
+    for experiment_dataset_name, hyper_config in hyper_config_dict.items():
+        named_configs = generate_combinations(hyper_config)
+        # print(experiment_dataset_name, len(named_configs))
+        for named_config in named_configs:
+            experiment_name = '{}_{}'.format(experiment_dataset_name,
+                                             '_'.join([str(item) for item in list(named_config.values())]))
+            # print(experiment_name)
+            configs_list.append(config(experiment_name=experiment_name, dataset_name=experiment_dataset_name,
+                                       num_classes=named_config['num_classes'],
+                                       samples_per_class=named_config['num_samples_per_class'],
+                                       target_samples_per_class=15 if experiment_dataset_name == 'mini-imagenet' else 1,
+                                       batch_size=named_config['batch_size'], train_update_steps=5, val_update_steps=5,
+                                       init_inner_loop_learning_rate=named_config['init_inner_loop_learning_rate'],
+                                       load_into_memory=True,
+                                       learnable_bn_gamma=True,
+                                       learnable_bn_beta=True, num_filters=named_config['num_filters'],
+                                       conv_padding=True
+                                       ))
+# print(len(configs_list))
 experiment_templates_json_dir = '../experiment_template_config/'
 experiment_config_target_json_dir = '../experiment_config/'
 
 if not os.path.exists(experiment_config_target_json_dir):
     os.makedirs(experiment_config_target_json_dir)
 
-def fill_template(script_text, train_seed, val_seed, batch_size, num_classes, samples_per_class,
-                  target_samples_per_class, train_update_steps, val_update_steps, inner_learning_rate):
-    script_text = script_text.replace('$train_seed$', str(train_seed))
-    script_text = script_text.replace('$val_seed$', str(val_seed))
-    script_text = script_text.replace('$batch_size$', str(batch_size))
-    script_text = script_text.replace('$num_classes$', str(num_classes))
-    script_text = script_text.replace('$samples_per_class$', str(samples_per_class))
-    script_text = script_text.replace('$target_samples_per_class$', str(target_samples_per_class))
-    script_text = script_text.replace('$train_update_steps$', str(train_update_steps))
-    script_text = script_text.replace('$val_update_steps$', str(val_update_steps))
-    script_text = script_text.replace('$inner_loop_learning_rate$', str(inner_learning_rate))
+
+def fill_template(script_text, config):
+    for key, item in vars(config).items():
+        script_text = script_text.replace("${}$".format(str(key)), str(item).lower())
 
     return script_text
 
@@ -86,28 +109,24 @@ for subdir, dir, files in os.walk(experiment_templates_json_dir):
             if "omniglot" in filepath:
                 search_name = "omniglot"
             elif "imagenet" in filepath:
-                search_name = "mini_imagenet"
+                search_name = "mini-imagenet"
 
-            for config in configs_list:
-                if config.dataset_name == search_name:
+            for config_item in configs_list:
+                config_item = config_item._asdict()
+                config_item['train_seed'] = seed_idx
+                config_item['val_seed'] = 0
+                config_item['experiment_name'] = "{}_{}".format(config_item['experiment_name'],
+                                                                config_item['train_seed'])
+                config_item = Bunch(config_item)
+
+                if config_item.dataset_name == search_name:
                     loaded_template_file = load_template(filepath=filepath)
 
                     cluster_script_text = fill_template(script_text=loaded_template_file,
-                                                        train_seed=seed_idx,
-                                                        val_seed=0, num_classes=config.num_classes,
-                                                        batch_size=config.batch_size,
-                                                        samples_per_class=config.samples_per_class,
-                                                        target_samples_per_class=config.target_samples_per_class,
-                                                        train_update_steps=config.train_update_steps,
-                                                        val_update_steps=config.val_update_steps,
-                                                        inner_learning_rate=config.inner_learning_rate)
+                                                        config=config_item)
 
-                    cluster_script_name = '{}/{}_{}.json'.format(experiment_config_target_json_dir,
-                                                                 template_file.replace(".json", '')
-                                                                 .replace("samples_per_class",
-                                                                          str(config.samples_per_class))
-                                                                 .replace("num_classes",
-                                                                          str(config.num_classes)).replace("num_steps",
-                                                                          str(config.train_update_steps)), seed_idx)
+                    cluster_script_name = '{}/{}-{}.json'.format(experiment_config_target_json_dir,
+                                                                 template_file.replace('.json', ''),
+                                                                 config_item.experiment_name)
                     cluster_script_name = os.path.abspath(cluster_script_name)
                     write_text_to_file(cluster_script_text, filepath=cluster_script_name)

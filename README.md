@@ -100,7 +100,7 @@ well as setting the rng seeds in pytorch.
 parameter or externally passed parameters. This is very useful in a meta-learning setting where inner-loop update 
 steps are applied on the internal parameters. By allowing layers to receive weight which they will only use for the 
 current inference phase, one can easily build various meta-learning models, which require inner_loop optimization 
-without havin to reload the internal parameters at every step. Essentially at the technical level, the meta-layers 
+without having to reload the internal parameters at every step. Essentially at the technical level, the meta-layers 
 forward prop looks like:
 ```python
 def forward(x, weights=None):
@@ -200,7 +200,7 @@ what to fill those with.
 8. ```python generate_configs.py; python generate_scripts.py```
 9. Your new scripts can be found in the experiment_scripts, ready to be run.
 
-# Acnknowledgments
+# Acknowledgments
 Thanks to the University of Edinburgh and ESPRC research council for funding this research.
  
  

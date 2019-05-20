@@ -37,8 +37,7 @@
   "weight_decay": 0.0,
   "dropout_rate_value":0.0,
   "min_learning_rate":0.00001,
-  "meta_learning_rate":0.001,   "total_epochs_before_pause": 10,
-  "task_learning_rate":-1,
+  "meta_learning_rate":0.001,   "total_epochs_before_pause": 100,
   "first_order_to_second_order_epoch":-1,
 
   "norm_layer":"batch_norm",
