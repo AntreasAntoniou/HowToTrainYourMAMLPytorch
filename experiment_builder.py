@@ -29,10 +29,11 @@ class ExperimentBuilder(object):
         self.state['best_val_iter'] = 0
         self.state['current_iter'] = 0
         self.state['current_iter'] = 0
+
+        # Train from scratch or continue from checkpoint
         self.start_epoch = 0
         self.create_summary_csv = False
 
-        # Train from scratch or continue from checkpoint
         if self.args.continue_from_epoch == 'from_scratch':
             print("Train from scratch.")
             self.create_summary_csv = True
@@ -57,8 +58,9 @@ class ExperimentBuilder(object):
         # Initialize dataloader
         self.data = data(args=args, current_iter=self.state['current_iter'])
 
-        print("train_seed {}, val_seed: {}, at start time".format(self.data.dataset.seed["train"],
-                                                                  self.data.dataset.seed["val"]))
+        # Random seed
+        print(f'train_seed: {self.data.dataset.seed["train"]}, val_seed: {self.data.dataset.seed["val"]}')
+
         self.total_epochs_before_pause = self.args.total_epochs_before_pause
         self.state['best_epoch'] = int(self.state['best_val_iter'] / self.args.total_iter_per_epoch)
         self.epoch = int(self.state['current_iter'] / self.args.total_iter_per_epoch)
