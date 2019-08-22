@@ -1,17 +1,101 @@
-import os
-import json
-import argparse
+from torch import cuda
 
-import torch
+
+def get_args():
+    import argparse
+    import os
+    import torch
+    import json
+    parser = argparse.ArgumentParser(description='Welcome to the MAML++ training and inference system')
+
+    parser.add_argument('--batch_size', nargs="?", type=int, default=32, help='Batch_size for experiment')
+    parser.add_argument('--image_height', nargs="?", type=int, default=28)
+    parser.add_argument('--image_width', nargs="?", type=int, default=28)
+    parser.add_argument('--image_channels', nargs="?", type=int, default=1)
+    parser.add_argument('--reset_stored_filepaths', type=str, default="False")
+    parser.add_argument('--reverse_channels', type=str, default="False")
+    parser.add_argument('--num_of_gpus', type=int, default=1)
+    parser.add_argument('--indexes_of_folders_indicating_class', nargs='+', default=[-2, -3])
+    parser.add_argument('--train_val_test_split', nargs='+', default=[0.73982737361, 0.26, 0.13008631319])
+    parser.add_argument('--samples_per_iter', nargs="?", type=int, default=1)
+    parser.add_argument('--labels_as_int', type=str, default="False")
+    parser.add_argument('--seed', type=int, default=104)
+
+    parser.add_argument('--gpu_to_use', type=int)
+    parser.add_argument('--num_dataprovider_workers', nargs="?", type=int, default=4)
+    parser.add_argument('--max_models_to_save', nargs="?", type=int, default=5)
+    parser.add_argument('--dataset_name', type=str, default="omniglot_dataset")
+    parser.add_argument('--dataset_path', type=str, default="datasets/omniglot_dataset")
+    parser.add_argument('--reset_stored_paths', type=str, default="False")
+    parser.add_argument('--experiment_name', nargs="?", type=str, )
+    parser.add_argument('--architecture_name', nargs="?", type=str)
+    parser.add_argument('--continue_from_epoch', nargs="?", type=str, default='latest', help='Continue from checkpoint of epoch')
+    parser.add_argument('--dropout_rate_value', type=float, default=0.3, help='Dropout_rate_value')
+    parser.add_argument('--num_target_samples', type=int, default=15, help='Dropout_rate_value')
+    parser.add_argument('--second_order', type=str, default="False", help='Dropout_rate_value')
+    parser.add_argument('--total_epochs', type=int, default=200, help='Number of epochs per experiment')
+    parser.add_argument('--total_iter_per_epoch', type=int, default=500, help='Number of iters per epoch')
+    parser.add_argument('--min_learning_rate', type=float, default=0.00001, help='Min learning rate')
+    parser.add_argument('--meta_learning_rate', type=float, default=0.001, help='Learning rate of overall MAML system')
+    parser.add_argument('--meta_opt_bn', type=str, default="False")
+    parser.add_argument('--task_learning_rate', type=float, default=0.1, help='Learning rate per task gradient step')
+
+    parser.add_argument('--norm_layer', type=str, default="batch_norm")
+    parser.add_argument('--max_pooling', type=str, default="False")
+    parser.add_argument('--per_step_bn_statistics', type=str, default="False")
+    parser.add_argument('--num_classes_per_set', type=int, default=20, help='Number of classes to sample per set')
+    parser.add_argument('--cnn_num_blocks', type=int, default=4, help='Number of classes to sample per set')
+    parser.add_argument('--number_of_training_steps_per_iter', type=int, default=1, help='Number of classes to sample per set')
+    parser.add_argument('--number_of_evaluation_steps_per_iter', type=int, default=1, help='Number of classes to sample per set')
+    parser.add_argument('--cnn_num_filters', type=int, default=64, help='Number of classes to sample per set')
+    parser.add_argument('--cnn_blocks_per_stage', type=int, default=1,
+                        help='Number of classes to sample per set')
+    parser.add_argument('--num_samples_per_class', type=int, default=1, help='Number of samples per set to sample')
+    parser.add_argument('--name_of_args_json_file', type=str, default="None")
+
+    args = parser.parse_args()
+    args_dict = vars(args)
+    if args.name_of_args_json_file is not "None":
+        args_dict = extract_args_from_json(args.name_of_args_json_file, args_dict)
+
+    for key in list(args_dict.keys()):
+
+        if str(args_dict[key]).lower() == "true":
+            args_dict[key] = True
+        elif str(args_dict[key]).lower() == "false":
+            args_dict[key] = False
+        if key == "dataset_path":
+            args_dict[key] = os.path.join(os.environ['DATASET_DIR'], args_dict[key])
+            print(key, os.path.join(os.environ['DATASET_DIR'], args_dict[key]))
+
+        print(key, args_dict[key], type(args_dict[key]))
+
+    args = Bunch(args_dict)
+
+
+    args.use_cuda = torch.cuda.is_available()
+
+    if args.gpu_to_use == -1:
+        args.use_cuda = False
+
+    if args.use_cuda:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_to_use)
+        device = cuda.current_device()
+    else:
+        device = torch.device('cpu')
+
+    return args, device
+
 
 
 class Bunch(object):
-    def __init__(self, adict):
-        self.__dict__.update(adict)
-
+  def __init__(self, adict):
+    self.__dict__.update(adict)
 
 def extract_args_from_json(json_file_path, args_dict):
-    with open(json_file_path, 'r') as f:
+    import json
+    summary_filename = json_file_path
+    with open(summary_filename) as f:
         summary_dict = json.load(fp=f)
 
     for key in summary_dict.keys():
@@ -19,90 +103,12 @@ def extract_args_from_json(json_file_path, args_dict):
             pass
         elif "gpu_to_use" in key:
             pass
-        elif "evaluate_on_test_set_only" in key:
-            pass
         else:
             args_dict[key] = summary_dict[key]
 
     return args_dict
 
 
-def get_args():
-    # Parse default set of arguments. There are more arguments in the config file!
-    parser = argparse.ArgumentParser(description='Welcome to the MAML++ training and inference system')
 
-    # Specs and hyperparameters
-    parser.add_argument('--batch_size', nargs="?", type=int, default=32, help='Batch size for experiment')
-    parser.add_argument('--min_learning_rate', type=float, default=0.00001, help='Minimum learning rate')
-    parser.add_argument('--meta_learning_rate', type=float, default=0.001, help='Learning rate of overall MAML system')
-    parser.add_argument('--task_learning_rate', type=float, default=0.1, help='Learning rate per task gradient step')
-    parser.add_argument('--total_epochs', type=int, default=200, help='Number of epochs per experiment')
-    parser.add_argument('--total_iter_per_epoch', type=int, default=500, help='Defines the number of iters per epoch')
-    parser.add_argument('--dropout_rate_value', type=float, default=0.3, help='Dropout rate')
-    parser.add_argument('--second_order', type=str, default="False", help='Whether to use second order derivatives')
-    parser.add_argument('--seed', type=int, default=104)
-    parser.add_argument('--evaluate_on_test_set_only', type=str, default="False", help="Whether to skip training and only run on test set")
 
-    # Data
-    parser.add_argument('--dataset_name', type=str, default="omniglot_dataset", help="Name of the dataset")
-    parser.add_argument('--dataset_path', type=str, default="omniglot_dataset", help="Environment variable DATASET_DIR is to be prepended")
-    parser.add_argument('--indexes_of_folders_indicating_class', nargs='+', default=[-2, -3], help="Index of path element that indicates the image's class")
-    parser.add_argument('--reset_stored_filepaths', type=str, default="False", help="Whether to re-write filepath json file")
-    parser.add_argument('--train_val_test_split', nargs='+', default=[0.73982737361, 0.26, 0.13008631319], help="Train / Val / Test proportion as list")
-    parser.add_argument('--num_samples_per_class', type=int, default=1, help='Number of samples per set to sample for support set')
-    parser.add_argument('--num_target_samples', type=int, default=15, help='Number of samples per set to sample for query set')
-    parser.add_argument('--num_dataprovider_workers', nargs="?", type=int, default=4, help="How many subprocesses to use in the pytorch DataLoader (num_workers)")
-    parser.add_argument('--labels_as_int', type=str, default="False", help="Whether to cast str label to int")
-    parser.add_argument('--image_height', nargs="?", type=int, default=28)
-    parser.add_argument('--image_width', nargs="?", type=int, default=28)
-    parser.add_argument('--image_channels', nargs="?", type=int, default=1)
-    parser.add_argument('--reverse_channels', type=str, default="False", help="Wether to reverse image channel in preprocessing stage")
 
-    # Device
-    parser.add_argument('--gpu_to_use', type=int, help="Index of cuda device to use for training")
-    parser.add_argument('--num_of_gpus', type=int, default=1, help="Each GPU will run $batch_size many images")
-
-    # Checkpointing
-    parser.add_argument('--experiment_name', nargs="?", type=str, help="Name to distinguish this experiment")
-    parser.add_argument('--continue_from_epoch', nargs="?", type=str, default='latest', help='Use from_scratch, latest, or number of epoch')
-
-    # Model architecture
-    parser.add_argument('--norm_layer', type=str, default="batch_norm", help="Use batch_norm or layer_norm")
-    parser.add_argument('--max_pooling', type=str, default="False", help="If True, max-pool after every conv layer; otherwise, use avg-pool once just before linear layer")
-    parser.add_argument('--per_step_bn_statistics', type=str, default="False", help="Whether to use per-step batch normalization statistics")
-    parser.add_argument('--num_classes_per_set', type=int, default=20, help='Number of classes per episode')
-    parser.add_argument('--number_of_training_steps_per_iter', type=int, default=1, help='Number of inner loop steps during meta-train')
-    parser.add_argument('--number_of_evaluation_steps_per_iter', type=int, default=1, help='Number of inner loop steps during meta-val and meta-test')
-    parser.add_argument('--cnn_num_filters', type=int, default=64, help='Number of classes to sample per set')
-    parser.add_argument('--name_of_args_json_file', type=str, default="None", help="Path to config json file")
-
-    # Get arguments from command, and then cast to dict.
-    args = parser.parse_args()
-    args_dict = vars(args)
-
-    # If argument json file is provided, parse it and update args_dict.
-    if args.name_of_args_json_file is not "None":
-        args_dict = extract_args_from_json(args.name_of_args_json_file, args_dict)
-
-    # Cast "true" or "false" str to bool. Set 'datasets' path relative to repo folder.
-    for key in list(args_dict.keys()):
-        if str(args_dict[key]).lower() == "true":
-            args_dict[key] = True
-        elif str(args_dict[key]).lower() == "false":
-            args_dict[key] = False
-        if key == "dataset_path":
-            args_dict[key] = os.path.join(os.environ['DATASET_DIR'], args_dict[key])
-        print(key, args_dict[key], type(args_dict[key]))
-
-    # e.g. args_dict["dataset_path"] -> args.dataset_path
-    args = Bunch(args_dict)
-
-    # Set cuda usage and device index
-    args.use_cuda = torch.cuda.is_available() and args.gpu_to_use != -1
-    if args.use_cuda:
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_to_use)
-        device = torch.cuda.current_device()
-    else:
-        device = torch.device('cpu')
-
-    return args, device
