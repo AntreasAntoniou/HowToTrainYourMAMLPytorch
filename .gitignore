@@ -6,5 +6,8 @@ __pycache__
 datasets/mini_imagenet_full_size
 datasets/mini_imagenet_full_size.tar.bz2
 
+# Experiment checkpoints
+Experiments
+
 # Editor settings
 .vscode
