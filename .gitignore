@@ -1,3 +1,9 @@
+# Python cache
+*.pyc
+
 # Data
+datasets/mini_imagenet_full_size
 datasets/mini_imagenet_full_size.tar.bz2
 
+# Editor settings
+.vscode
