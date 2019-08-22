@@ -320,6 +320,7 @@ class MetaLayerNormLayer(nn.Module):
     def extra_repr(self):
         return '{normalized_shape}, eps={eps}, ' \
                'elementwise_affine={elementwise_affine}'.format(**self.__dict__)
+
 class MetaConvNormLayerReLU(nn.Module):
     def __init__(self, input_shape, num_filters, kernel_size, stride, padding, use_bias, args, normalization=True,
                  meta_layer=True, no_bn_learnable_params=False, device=None):
@@ -662,14 +663,14 @@ class VGGReLUNormNetwork(nn.Module):
     def zero_grad(self, params=None):
         if params is None:
             for param in self.parameters():
-                if param.requires_grad == True:
+                if param.requires_grad:
                     if param.grad is not None:
                         if torch.sum(param.grad) > 0:
                             print(param.grad)
                             param.grad.zero_()
         else:
             for name, param in params.items():
-                if param.requires_grad == True:
+                if param.requires_grad:
                     if param.grad is not None:
                         if torch.sum(param.grad) > 0:
                             print(param.grad)
