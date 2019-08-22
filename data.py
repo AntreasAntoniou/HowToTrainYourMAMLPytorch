@@ -249,7 +249,7 @@ class FewShotLearningDatasetParallel(Dataset):
         if not os.path.exists(data_path_file):
             self.reset_stored_filepaths = True
 
-        if self.reset_stored_filepaths == True:
+        if self.reset_stored_filepaths:
             if os.path.exists(data_path_file):
                 os.remove(data_path_file)
             self.reset_stored_filepaths = False
