@@ -1,4 +1,5 @@
 # Python cache
+__pycache__
 *.pyc
 
 # Data
