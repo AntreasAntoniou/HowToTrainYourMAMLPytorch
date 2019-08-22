@@ -21,7 +21,7 @@ def extract_args_from_json(json_file_path, args_dict):
 
 
 def get_args():
-    # Parse default set of arguments. There are more arguments in the config file!
+    # Parses default set of arguments. There are more arguments in the config json file!
     parser = argparse.ArgumentParser(description='Welcome to the MAML++ training and inference system')
 
     # Specs and hyperparameters
@@ -77,7 +77,11 @@ def get_args():
     if args.name_of_args_json_file is not "None":
         args_dict = extract_args_from_json(args.name_of_args_json_file, args_dict)
 
+    # Set CUDA usage
+    args_dict['use_cuda'] = torch.cuda.is_available() and args_dict['gpu_to_use'] != -1
+
     # Cast "true" or "false" str to bool. Set 'datasets' path relative to repo folder.
+    print("TRAINING CONFIGURATIONS:")
     for key in list(args_dict.keys()):
         if str(args_dict[key]).lower() == "true":
             args_dict[key] = True
@@ -85,13 +89,13 @@ def get_args():
             args_dict[key] = False
         if key == "dataset_path":
             args_dict[key] = os.path.join(os.environ['DATASET_DIR'], args_dict[key])
-        print(key, args_dict[key], type(args_dict[key]))
+        print(f"{key} = {args_dict[key]} ({type(args_dict[key]).__name__})")
+    print()
 
     # e.g. args_dict["dataset_path"] -> args.dataset_path
     args = Bunch(args_dict)
 
-    # Set cuda usage and device index
-    args.use_cuda = torch.cuda.is_available() and args.gpu_to_use != -1
+    # Set training device
     if args.use_cuda:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_to_use)
         device = torch.cuda.current_device()
