@@ -47,11 +47,13 @@ def load_statistics(experiment_name, filename="summary_statistics.csv"):
 
 
 def build_experiment_folder(experiment_name):
-    experiment_path = os.path.abspath(experiment_name)
+    experiment_path = os.path.join('Experiments', experiment_name)
     saved_models_filepath = "{}/{}".format(experiment_path, "saved_models")
     logs_filepath = "{}/{}".format(experiment_path, "logs")
     samples_filepath = "{}/{}".format(experiment_path, "visual_outputs")
 
+    if not os.path.exists('Experiments'):
+        os.mkdir('Experiment')
     if not os.path.exists(experiment_path):
         os.makedirs(experiment_path)
     if not os.path.exists(logs_filepath):
