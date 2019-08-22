@@ -58,7 +58,7 @@ def augment_image(image, k, channels, augment_bool, args, dataset_name):
         images = [item for item in image]
         output_images = []
         for image in images:
-            if augment_bool is True:
+            if augment_bool:
                 for transform_current in transform_train:
                     image = transform_current(image)
             else:
@@ -67,7 +67,7 @@ def augment_image(image, k, channels, augment_bool, args, dataset_name):
             output_images.append(image)
         image = torch.stack(output_images)
     else:
-        if augment_bool is True:
+        if augment_bool:
             # meanstd transformation
             for transform_current in transform_train:
                 image = transform_current(image)
@@ -175,10 +175,10 @@ class FewShotLearningDatasetParallel(Dataset):
         """
         rng = np.random.RandomState(seed=self.seed['val'])
 
-        if self.args.sets_are_pre_split == True:
-            data_image_paths, index_to_label_name_dict_file, label_to_index = self.load_datapaths()
+        if self.args.sets_are_pre_split:
+            data_image_path_dict, index_to_label_name_dict_file, label_to_index = self.load_datapaths()
             dataset_splits = dict()
-            for key, value in data_image_paths.items():
+            for key, value in data_image_path_dict.items():
                 key = self.get_label_from_index(index=key)
                 bits = key.split("/")
                 set_name = bits[0]
@@ -210,7 +210,7 @@ class FewShotLearningDatasetParallel(Dataset):
                                      {class_key: data_image_paths[class_key] for class_key in x_test_classes},
             dataset_splits = {"train": x_train, "val":x_val , "test": x_test}
 
-        if self.args.load_into_memory is True:
+        if self.args.load_into_memory:
 
             print("Loading data into RAM")
             x_loaded = {"train": [], "val": [], "test": []}
@@ -218,7 +218,6 @@ class FewShotLearningDatasetParallel(Dataset):
             for set_key, set_value in dataset_splits.items():
                 print("Currently loading into memory the {} set".format(set_key))
                 x_loaded[set_key] = {key: np.zeros(len(value), ) for key, value in set_value.items()}
-                # for class_key, class_value in set_value.items():
                 with tqdm.tqdm(total=len(set_value)) as pbar_memory_load:
                     with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
                         # Process the list of files, but split the work across the process pool to use all CPUs!
@@ -255,16 +254,16 @@ class FewShotLearningDatasetParallel(Dataset):
             self.reset_stored_filepaths = False
 
         try:
-            data_image_paths = self.load_from_json(filename=data_path_file)
-            label_to_index = self.load_from_json(filename=self.label_name_to_map_dict_file)
-            index_to_label_name_dict_file = self.load_from_json(filename=self.index_to_label_name_dict_file)
-            return data_image_paths, index_to_label_name_dict_file, label_to_index
+            data_image_path_dict = self.load_from_json(filename=data_path_file)
+            index_to_label_name_dict = self.load_from_json(filename=self.index_to_label_name_dict_file)
+            label_name_to_index_dict = self.load_from_json(filename=self.label_name_to_map_dict_file)
+            return data_image_path_dict, index_to_label_name_dict, label_name_to_index_dict
         except:
             print("Mapped data paths can't be found, remapping paths..")
-            data_image_paths, code_to_label_name, label_name_to_code = self.get_data_paths()
-            self.save_to_json(dict_to_store=data_image_paths, filename=data_path_file)
-            self.save_to_json(dict_to_store=code_to_label_name, filename=self.index_to_label_name_dict_file)
-            self.save_to_json(dict_to_store=label_name_to_code, filename=self.label_name_to_map_dict_file)
+            data_image_path_dict, index_to_label_name_dict, label_name_to_index_dict = self.get_data_paths()
+            self.save_to_json(dict_to_store=data_image_path_dict, filename=data_path_file)
+            self.save_to_json(dict_to_store=index_to_label_name_dict, filename=self.index_to_label_name_dict_file)
+            self.save_to_json(dict_to_store=label_name_to_index_dict, filename=self.label_name_to_map_dict_file)
             return self.load_datapaths()
 
     def save_to_json(self, filename, dict_to_store):
@@ -272,9 +271,8 @@ class FewShotLearningDatasetParallel(Dataset):
             json.dump(dict_to_store, fp=f)
 
     def load_from_json(self, filename):
-        with open(filename, mode="r") as f:
+        with open(filename,'r') as f:
             load_dict = json.load(fp=f)
-
         return load_dict
 
     def load_test_image(self, filepath):
@@ -447,7 +445,7 @@ class FewShotLearningDatasetParallel(Dataset):
         """
         x_shape = x.shape
         x = np.reshape(x, (-1, x_shape[-3], x_shape[-2], x_shape[-1]))
-        if self.reverse_channels is True:
+        if self.reverse_channels:
             reverse_photos = np.ones(shape=x.shape)
             for channel in range(x.shape[-1]):
                 reverse_photos[:, :, :, x.shape[-1] - 1 - channel] = x[:, :, :, channel]
@@ -564,11 +562,9 @@ class MetaLearningSystemDataLoader(object):
         """
         self.num_of_gpus = args.num_of_gpus
         self.batch_size = args.batch_size
-        self.samples_per_iter = args.samples_per_iter
         self.num_workers = args.num_dataprovider_workers
         self.total_train_iters_produced = 0
         self.dataset = FewShotLearningDatasetParallel(args=args)
-        self.batches_per_iter = args.samples_per_iter
         self.full_data_length = self.dataset.data_length
         self.continue_from_iter(current_iter=current_iter)
         self.args = args
@@ -578,7 +574,7 @@ class MetaLearningSystemDataLoader(object):
         Returns a data loader with the correct set (train, val or test), continuing from the current iter.
         :return:
         """
-        return DataLoader(self.dataset, batch_size=(self.num_of_gpus * self.batch_size * self.samples_per_iter),
+        return DataLoader(self.dataset, batch_size=(self.num_of_gpus * self.batch_size),
                           shuffle=False, num_workers=self.num_workers, drop_last=True)
 
     def continue_from_iter(self, current_iter):
@@ -586,7 +582,7 @@ class MetaLearningSystemDataLoader(object):
         Makes sure the data provider is aware of where we are in terms of training iterations in the experiment.
         :param current_iter:
         """
-        self.total_train_iters_produced += (current_iter * (self.num_of_gpus * self.batch_size * self.samples_per_iter))
+        self.total_train_iters_produced += (current_iter * (self.num_of_gpus * self.batch_size))
 
     def get_train_batches(self, total_batches=-1, augment_images=False):
         """
@@ -600,7 +596,7 @@ class MetaLearningSystemDataLoader(object):
             self.dataset.data_length["train"] = total_batches * self.dataset.batch_size
         self.dataset.switch_set(set_name="train", current_iter=self.total_train_iters_produced)
         self.dataset.set_augmentation(augment_images=augment_images)
-        self.total_train_iters_produced += (self.num_of_gpus * self.batch_size * self.samples_per_iter)
+        self.total_train_iters_produced += (self.num_of_gpus * self.batch_size)
         for sample_id, sample_batched in enumerate(self.get_dataloader()):
             yield sample_batched
 
