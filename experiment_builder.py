@@ -30,7 +30,6 @@ class ExperimentBuilder(object):
         self.state['current_iter'] = 0
         self.state['current_iter'] = 0
         self.start_epoch = 0
-        self.max_models_to_save = self.args.max_models_to_save
         self.create_summary_csv = False
 
         if self.args.continue_from_epoch == 'from_scratch':
@@ -61,7 +60,7 @@ class ExperimentBuilder(object):
         self.total_epochs_before_pause = self.args.total_epochs_before_pause
         self.state['best_epoch'] = int(self.state['best_val_iter'] / self.args.total_iter_per_epoch)
         self.epoch = int(self.state['current_iter'] / self.args.total_iter_per_epoch)
-        self.augment_flag = True if 'omniglot' in self.args.dataset_name.lower() else False
+        self.augment_flag = 'omniglot' in self.args.dataset_name.lower()
         self.start_time = time.time()
         self.epochs_done_in_this_run = 0
         print(self.state['current_iter'], int(self.args.total_iter_per_epoch * self.args.total_epochs))
@@ -311,7 +310,7 @@ class ExperimentBuilder(object):
         with tqdm.tqdm(initial=self.state['current_iter'],
                        total=int(self.args.total_iter_per_epoch * self.args.total_epochs)) as pbar_train:
 
-            while (self.state['current_iter'] < (self.args.total_epochs * self.args.total_iter_per_epoch)) and (self.args.evaluate_on_test_set_only == False):
+            while self.state['current_iter'] < (self.args.total_epochs * self.args.total_iter_per_epoch) and not self.args.evaluate_on_test_set_only:
 
                 for train_sample_idx, train_sample in enumerate(
                         self.data.get_train_batches(total_batches=int(self.args.total_iter_per_epoch *
