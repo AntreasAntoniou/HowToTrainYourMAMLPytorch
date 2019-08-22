@@ -32,27 +32,29 @@ class ExperimentBuilder(object):
         self.start_epoch = 0
         self.create_summary_csv = False
 
+        # Train from scratch or continue from checkpoint
         if self.args.continue_from_epoch == 'from_scratch':
+            print("Train from scratch.")
             self.create_summary_csv = True
 
-        elif self.args.continue_from_epoch == 'latest':
-            checkpoint = os.path.join(self.saved_models_filepath, "train_model_latest")
-            print("attempting to find existing checkpoint", )
-            if os.path.exists(checkpoint):
+        elif self.args.continue_from_epoch == 'latest' or \
+                (self.args.continue_from_epoch.isdigit() and int(self.args.continue_from_epoch) >= 0):
+            print(f"Attempting to find checkpoint for epoch {self.args.continue_from_epoch}... ", end='')
+            if os.path.exists(os.path.join(self.saved_models_filepath, "train_model_latest")):
+                print("succeeded")
                 self.state = \
                     self.model.load_model(model_save_dir=self.saved_models_filepath, model_name="train_model",
                                           model_idx='latest')
                 self.start_epoch = int(self.state['current_iter'] / self.args.total_iter_per_epoch)
-
             else:
+                print("failed. Train from scratch.")
                 self.args.continue_from_epoch = 'from_scratch'
                 self.create_summary_csv = True
-        elif int(self.args.continue_from_epoch) >= 0:
-            self.state = \
-                self.model.load_model(model_save_dir=self.saved_models_filepath, model_name="train_model",
-                                      model_idx=self.args.continue_from_epoch)
-            self.start_epoch = int(self.state['current_iter'] / self.args.total_iter_per_epoch)
 
+        else:
+            raise ValueError(f"continue_from_epoch argument value invalid: {self.args.continue_from_epoch}")
+
+        # Initialize dataloader
         self.data = data(args=args, current_iter=self.state['current_iter'])
 
         print("train_seed {}, val_seed: {}, at start time".format(self.data.dataset.seed["train"],
