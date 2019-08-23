@@ -39,7 +39,7 @@ class ExperimentBuilder(object):
             self.create_summary_csv = True
 
         elif self.args.continue_from_epoch == 'latest' or \
-                (self.args.continue_from_epoch.isdigit() and int(self.args.continue_from_epoch) >= 0):
+                (self.args.continue_from_epoch.isdigit() and int(self.args.continue_from_epoch) >= 1):
             print(f"Attempting to find checkpoint for epoch {self.args.continue_from_epoch}... ", end='')
             if os.path.exists(os.path.join(self.saved_models_filepath, "train_model_latest")):
                 print("succeeded")
@@ -67,7 +67,7 @@ class ExperimentBuilder(object):
         self.epochs_done_in_this_run = 0
 
         # Print status
-        print("RNG SEED:")
+        print("STARTING WITH SEED:")
         print(f'train seed: {self.data.dataset.seed["train"]}, val seed: {self.data.dataset.seed["val"]}\n')
         print("CURRENT PROGRESS:")
         print(f'{self.state["current_iter"]} of {int(self.args.total_iter_per_epoch * self.args.total_epochs)} iters\n')
@@ -83,7 +83,7 @@ class ExperimentBuilder(object):
         if summary_losses is None:
             summary_losses = dict()
 
-        for key in total_losses:
+        for key in total_losses.keys():
             summary_losses[f"{phase}_{key}_mean"] = np.mean(total_losses[key])
             summary_losses[f"{phase}_{key}_std"] = np.std(total_losses[key])
 
@@ -96,10 +96,19 @@ class ExperimentBuilder(object):
         :return: A summary string ready to be shown to humans.
         """
         output_update = ""
-        for key, value in zip(list(summary_losses.keys()), list(summary_losses.values())):
+        importance_vector = []
+        for key, value in summary_losses.items():
             if "loss" in key or "accuracy" in key:
-                value = float(value)
-                output_update += "{}: {:.4f}, ".format(key, value)
+                output_update += f"{key}: {float(value):.4f} | "
+            elif "importance_vector" in key:
+                importance_vector.append(value.item())
+            elif "learning_rate" in key:
+                pass
+            else:
+                raise NotImplementedError(key)
+
+        if self.args.use_multi_step_loss_optimization:
+            output_update += "step_importance: [" + ', '.join(f"{i:.4f}" for i in importance_vector) + "] "
 
         return output_update
 
@@ -129,7 +138,7 @@ class ExperimentBuilder(object):
 
         losses, _ = self.model.run_train_iter(data_batch=data_batch, epoch=epoch_idx)
 
-        for key, value in zip(list(losses.keys()), list(losses.values())):
+        for key, value in losses.items():
             if key not in total_losses:
                 total_losses[key] = [float(value)]
             else:
@@ -139,7 +148,7 @@ class ExperimentBuilder(object):
         train_output_update = self.build_loss_summary_string(losses)
 
         pbar_train.update(1)
-        pbar_train.set_description("training phase {} -> {}".format(self.epoch, train_output_update))
+        pbar_train.set_description(f"Epoch {self.epoch:03d}/{self.total_epochs_before_pause} -> {train_output_update}")
 
         current_iter += 1
 
@@ -154,11 +163,10 @@ class ExperimentBuilder(object):
         :return: The updated val_losses, total_losses
         """
         x_support_set, x_target_set, y_support_set, y_target_set, seed = val_sample
-        data_batch = (
-            x_support_set, x_target_set, y_support_set, y_target_set)
+        data_batch = (x_support_set, x_target_set, y_support_set, y_target_set)
 
         losses, _ = self.model.run_validation_iter(data_batch=data_batch)
-        for key, value in zip(list(losses.keys()), list(losses.values())):
+        for key, value in losses.items():
             if key not in total_losses:
                 total_losses[key] = [float(value)]
             else:
@@ -168,22 +176,22 @@ class ExperimentBuilder(object):
         val_output_update = self.build_loss_summary_string(losses)
 
         pbar_val.update(1)
-        pbar_val.set_description(
-            "val_phase {} -> {}".format(self.epoch, val_output_update))
+        pbar_val.set_description(f"Validation -> {val_output_update}")
 
         return val_losses, total_losses
 
-    def test_evaluation_iteration(self, val_sample, model_idx, sample_idx, per_model_per_batch_preds, pbar_test):
+    def test_evaluation_iteration(self, test_sample, model_idx, sample_idx, per_model_per_batch_preds, pbar_test):
         """
-        Runs a validation iteration, updates the progress bar and returns the total and current epoch val losses.
-        :param val_sample: A sample from the data provider
-        :param total_losses: The current total losses dictionary to be updated.
-        :param pbar_test: The progress bar of the val stage.
-        :return: The updated val_losses, total_losses
+        Runs a test iteration, updates the progress bar and returns the per model per batch predictions.
+        :param test_sample: A sample from the data provider.
+        :param model_idx: Index of the model.
+        :param sample_idx: Index of the current test sample.
+        :param per_model_per_batch_preds: per_model_per_batch_preds[model_idx] = per task predictions
+        :param pbar_test: The progress bar of the test stage.
+        :return: The extended per_model_per_batch_preds
         """
-        x_support_set, x_target_set, y_support_set, y_target_set, seed = val_sample
-        data_batch = (
-            x_support_set, x_target_set, y_support_set, y_target_set)
+        x_support_set, x_target_set, y_support_set, y_target_set, seed = test_sample
+        data_batch = (x_support_set, x_target_set, y_support_set, y_target_set)
 
         losses, per_task_preds = self.model.run_validation_iter(data_batch=data_batch)
 
@@ -192,8 +200,7 @@ class ExperimentBuilder(object):
         test_output_update = self.build_loss_summary_string(losses)
 
         pbar_test.update(1)
-        pbar_test.set_description(
-            "test_phase {} -> {}".format(self.epoch, test_output_update))
+        pbar_test.set_description(f"Test -> {test_output_update}")
 
         return per_model_per_batch_preds
 
@@ -213,17 +220,16 @@ class ExperimentBuilder(object):
         model.save_model(model_save_dir=os.path.join(self.saved_models_filepath, "train_model_latest"),
                          state=state)
 
-        print("saved models to", self.saved_models_filepath)
+        print("Saved model to", self.saved_models_filepath)
 
-    def pack_and_save_metrics(self, start_time, create_summary_csv, train_losses, val_losses, state):
+    def pack_and_save_metrics(self, start_time, train_losses, val_losses, state):
         """
         Given current epochs start_time, train losses, val losses and whether to create a new stats csv file, pack stats
         and save into a statistics csv file. Return a new start time for the new epoch.
         :param start_time: The start time of the current epoch
-        :param create_summary_csv: A boolean variable indicating whether to create a new statistics file or
-        append results to existing one
         :param train_losses: A dictionary with the current train losses
         :param val_losses: A dictionary with the currrent val loss
+        :param state: The current state of the experiment
         :return: The current time, to be used for the next epoch.
         """
         epoch_summary_losses = self.merge_two_dicts(first_dict=train_losses, second_dict=val_losses)
@@ -232,7 +238,6 @@ class ExperimentBuilder(object):
             state['per_epoch_statistics'] = dict()
 
         for key, value in epoch_summary_losses.items():
-
             if key not in state['per_epoch_statistics']:
                 state['per_epoch_statistics'][key] = [value]
             else:
@@ -242,7 +247,8 @@ class ExperimentBuilder(object):
         epoch_summary_losses["epoch"] = self.epoch
         epoch_summary_losses['epoch_run_time'] = time.time() - start_time
 
-        if create_summary_csv:
+        # Write header row for csv
+        if self.create_summary_csv:
             self.summary_statistics_filepath = save_statistics(self.logs_filepath, list(epoch_summary_losses.keys()),
                                                                create=True)
             self.create_summary_csv = False
@@ -254,7 +260,7 @@ class ExperimentBuilder(object):
                                                            list(epoch_summary_losses.values()))
         return start_time, state
 
-    def evaluated_test_set_using_the_best_models(self, top_n_models):
+    def evaluate_test_set_using_the_best_models(self, top_n_models):
         per_epoch_statistics = self.state['per_epoch_statistics']
         val_acc = np.copy(per_epoch_statistics['val_accuracy_mean'])
         val_idx = np.array([i for i in range(len(val_acc))])
@@ -290,24 +296,21 @@ class ExperimentBuilder(object):
         #     assert np.equal(np.array(per_model_per_batch_targets[0]), np.array(per_model_per_batch_targets[i]))
 
         per_batch_preds = np.mean(per_model_per_batch_preds, axis=0)
-        #print(per_batch_preds.shape)
         per_batch_max = np.argmax(per_batch_preds, axis=2)
         per_batch_targets = np.array(per_model_per_batch_targets[0]).reshape(per_batch_max.shape)
-        #print(per_batch_max)
+
         accuracy = np.mean(np.equal(per_batch_targets, per_batch_max))
         accuracy_std = np.std(np.equal(per_batch_targets, per_batch_max))
 
         test_losses = {"test_accuracy_mean": accuracy, "test_accuracy_std": accuracy_std}
 
-        _ = save_statistics(self.logs_filepath,
-                            list(test_losses.keys()),
-                            create=True, filename="test_summary.csv")
+        save_statistics(self.logs_filepath, list(test_losses.keys()), create=True, filename="test_summary.csv")
 
-        summary_statistics_filepath = save_statistics(self.logs_filepath,
-                                                      list(test_losses.values()),
+        summary_statistics_filepath = save_statistics(self.logs_filepath, list(test_losses.values()),
                                                       create=False, filename="test_summary.csv")
+
         print(test_losses)
-        print("saved test performance at", summary_statistics_filepath)
+        print("Saved test performance at", summary_statistics_filepath)
 
     def run_experiment(self):
         """
@@ -317,14 +320,15 @@ class ExperimentBuilder(object):
         with tqdm.tqdm(initial=self.state['current_iter'],
                        total=int(self.args.total_iter_per_epoch * self.args.total_epochs)) as pbar_train:
 
-            while self.state['current_iter'] < (self.args.total_epochs * self.args.total_iter_per_epoch) and not self.args.evaluate_on_test_set_only:
+            while self.state['current_iter'] < (self.args.total_epochs * self.args.total_iter_per_epoch) and \
+                    not self.args.evaluate_on_test_set_only:
 
                 for train_sample_idx, train_sample in enumerate(
                         self.data.get_train_batches(total_batches=int(self.args.total_iter_per_epoch *
                                                                       self.args.total_epochs) - self.state[
                                                                       'current_iter'],
                                                     augment_images=self.augment_flag)):
-                    # print(self.state['current_iter'], (self.args.total_epochs * self.args.total_iter_per_epoch))
+                    
                     train_losses, total_losses, self.state['current_iter'] = self.train_iteration(
                         train_sample=train_sample,
                         total_losses=self.total_losses,
@@ -362,7 +366,6 @@ class ExperimentBuilder(object):
                         self.save_models(model=self.model, epoch=self.epoch, state=self.state)
 
                         self.start_time, self.state = self.pack_and_save_metrics(start_time=self.start_time,
-                                                                                 create_summary_csv=self.create_summary_csv,
                                                                                  train_losses=train_losses,
                                                                                  val_losses=val_losses,
                                                                                  state=self.state)
@@ -375,7 +378,9 @@ class ExperimentBuilder(object):
                                      dict_to_store=self.state['per_epoch_statistics'])
 
                         if self.epochs_done_in_this_run >= self.total_epochs_before_pause:
-                            print("train_seed {}, val_seed: {}, at pause time".format(self.data.dataset.seed["train"],
-                                                                                      self.data.dataset.seed["val"]))
+                            print("RNG SEED:")
+                            print(f'train seed: {self.data.dataset.seed["train"]}, val seed: {self.data.dataset.seed["val"]}\n')
+                            print("\nPAUSED TRAINING.")
                             sys.exit()
-            self.evaluated_test_set_using_the_best_models(top_n_models=5)
+
+            self.evaluate_test_set_using_the_best_models(top_n_models=5)
