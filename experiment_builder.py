@@ -58,16 +58,19 @@ class ExperimentBuilder(object):
         # Initialize dataloader
         self.data = data(args=args, current_iter=self.state['current_iter'])
 
-        # Random seed
-        print(f'train_seed: {self.data.dataset.seed["train"]}, val_seed: {self.data.dataset.seed["val"]}')
-
+        # Other initializations
         self.total_epochs_before_pause = self.args.total_epochs_before_pause
         self.state['best_epoch'] = int(self.state['best_val_iter'] / self.args.total_iter_per_epoch)
         self.epoch = int(self.state['current_iter'] / self.args.total_iter_per_epoch)
         self.augment_flag = 'omniglot' in self.args.dataset_name.lower()
         self.start_time = time.time()
         self.epochs_done_in_this_run = 0
-        print(self.state['current_iter'], int(self.args.total_iter_per_epoch * self.args.total_epochs))
+
+        # Print status
+        print("RNG SEED:")
+        print(f'train seed: {self.data.dataset.seed["train"]}, val seed: {self.data.dataset.seed["val"]}\n')
+        print("CURRENT PROGRESS:")
+        print(f'{self.state["current_iter"]} of {int(self.args.total_iter_per_epoch * self.args.total_epochs)} iters\n')
 
     def build_summary_dict(self, total_losses, phase, summary_losses=None):
         """
@@ -81,8 +84,8 @@ class ExperimentBuilder(object):
             summary_losses = dict()
 
         for key in total_losses:
-            summary_losses["{}_{}_mean".format(phase, key)] = np.mean(total_losses[key])
-            summary_losses["{}_{}_std".format(phase, key)] = np.std(total_losses[key])
+            summary_losses[f"{phase}_{key}_mean"] = np.mean(total_losses[key])
+            summary_losses[f"{phase}_{key}_std"] = np.std(total_losses[key])
 
         return summary_losses
 
