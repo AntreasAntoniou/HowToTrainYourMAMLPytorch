@@ -5,6 +5,9 @@ __pycache__
 # Data
 datasets/mini_imagenet_full_size
 datasets/mini_imagenet_full_size.tar.bz2
+datasets/label_name_to_map_mini_imagenet_full_size.json
+datasets/map_to_label_name_mini_imagenet_full_size.json
+datasets/mini_imagenet_full_size.json
 
 # Experiment checkpoints
 Experiments
