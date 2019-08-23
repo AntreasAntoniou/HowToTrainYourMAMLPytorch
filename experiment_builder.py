@@ -45,7 +45,7 @@ class ExperimentBuilder(object):
                 print("succeeded")
                 self.state = \
                     self.model.load_model(model_save_dir=self.saved_models_filepath, model_name="train_model",
-                                          model_idx='latest')
+                                          model_idx=self.args.continue_from_epoch)
                 self.start_epoch = int(self.state['current_iter'] / self.args.total_iter_per_epoch)
             else:
                 print("failed. Train from scratch.")
