@@ -11,3 +11,6 @@ Experiments
 
 # Editor settings
 .vscode
+
+# System files
+.DS_Store
