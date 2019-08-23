@@ -17,14 +17,11 @@ def load_from_json(filename):
 
 def save_statistics(experiment_name, line_to_add, filename="summary_statistics.csv", create=False):
     summary_filename = "{}/{}".format(experiment_name, filename)
-    if create:
-        with open(summary_filename, 'w') as f:
-            writer = csv.writer(f)
-            writer.writerow(line_to_add)
-    else:
-        with open(summary_filename, 'a') as f:
-            writer = csv.writer(f)
-            writer.writerow(line_to_add)
+    mode = 'w' if create else 'a'
+    
+    with open(summary_filename, mode) as f:
+        writer = csv.writer(f)
+        writer.writerow(line_to_add)
 
     return summary_filename
 
@@ -53,7 +50,7 @@ def build_experiment_folder(experiment_name):
     samples_filepath = "{}/{}".format(experiment_path, "visual_outputs")
 
     if not os.path.exists('Experiments'):
-        os.mkdir('Experiment')
+        os.mkdir('Experiments')
     if not os.path.exists(experiment_path):
         os.makedirs(experiment_path)
     if not os.path.exists(logs_filepath):
