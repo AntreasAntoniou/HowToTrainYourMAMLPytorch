@@ -222,7 +222,7 @@ class MAMLFewShotClassifier(nn.Module):
                                                    total_accuracies=total_accuracies)
 
         for idx, item in enumerate(per_step_loss_importance_vectors):
-            losses['loss_importance_vector_{}'.format(idx)] = item.detach().cpu().numpy()
+            losses['importance_vector_{}'.format(idx)] = item.detach().cpu().numpy()
 
         return losses, per_task_target_preds
 
