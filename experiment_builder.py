@@ -61,7 +61,7 @@ class ExperimentBuilder(object):
         # Other initializations
         self.total_epochs_before_pause = self.args.total_epochs_before_pause
         self.state['best_epoch'] = int(self.state['best_val_iter'] / self.args.total_iter_per_epoch)
-        self.epoch = int(self.state['current_iter'] / self.args.total_iter_per_epoch)
+        self.epoch = self.state['current_iter'] // self.args.total_iter_per_epoch
         self.augment_flag = 'omniglot' in self.args.dataset_name.lower()
         self.start_time = time.time()
         self.epochs_done_in_this_run = 0
@@ -118,25 +118,18 @@ class ExperimentBuilder(object):
         z.update(second_dict)
         return z
 
-    def train_iteration(self, train_sample, sample_idx, epoch_idx, total_losses, current_iter, pbar_train):
+    def train_iteration(self, train_sample, total_losses, pbar_train):
         """
         Runs a training iteration, updates the progress bar and returns the total and current epoch train losses.
-        :param train_sample: A sample from the data provider
-        :param sample_idx: The index of the incoming sample, in relation to the current training run.
-        :param epoch_idx: The epoch index.
+        :param train_sample: A sample from the data provider.
         :param total_losses: The current total losses dictionary to be updated.
-        :param current_iter: The current training iteration in relation to the whole experiment.
         :param pbar_train: The progress bar of the training.
-        :return: Updates total_losses, train_losses, current_iter
+        :return: Updates and returns total_losses, train_losses
         """
-        x_support_set, x_target_set, y_support_set, y_target_set, seed = train_sample
-        data_batch = (x_support_set, x_target_set, y_support_set, y_target_set)
+        # Slice out [x_support_set, x_target_set, y_support_set, y_target_set]
+        data_batch = train_sample[:4]
 
-        if sample_idx == 0:
-            print("shape of data", x_support_set.shape, x_target_set.shape, y_support_set.shape,
-                  y_target_set.shape)
-
-        losses, _ = self.model.run_train_iter(data_batch=data_batch, epoch=epoch_idx)
+        losses, _ = self.model.run_train_iter(data_batch=data_batch, epoch=self.epoch)
 
         for key, value in losses.items():
             if key not in total_losses:
@@ -150,9 +143,7 @@ class ExperimentBuilder(object):
         pbar_train.update(1)
         pbar_train.set_description(f"Epoch {self.epoch:03d}/{self.total_epochs_before_pause} -> {train_output_update}")
 
-        current_iter += 1
-
-        return train_losses, total_losses, current_iter
+        return train_losses, total_losses
 
     def evaluation_iteration(self, val_sample, total_losses, pbar_val, phase):
         """
@@ -162,8 +153,8 @@ class ExperimentBuilder(object):
         :param pbar_val: The progress bar of the val stage.
         :return: The updated val_losses, total_losses
         """
-        x_support_set, x_target_set, y_support_set, y_target_set, seed = val_sample
-        data_batch = (x_support_set, x_target_set, y_support_set, y_target_set)
+        # Slice out [x_support_set, x_target_set, y_support_set, y_target_set]
+        data_batch = val_sample[:4]
 
         losses, _ = self.model.run_validation_iter(data_batch=data_batch)
         for key, value in losses.items():
@@ -190,8 +181,8 @@ class ExperimentBuilder(object):
         :param pbar_test: The progress bar of the test stage.
         :return: The extended per_model_per_batch_preds
         """
-        x_support_set, x_target_set, y_support_set, y_target_set, seed = test_sample
-        data_batch = (x_support_set, x_target_set, y_support_set, y_target_set)
+        # Slice out [x_support_set, x_target_set, y_support_set, y_target_set]
+        data_batch = test_sample[:4]
 
         losses, per_task_preds = self.model.run_validation_iter(data_batch=data_batch)
 
@@ -323,32 +314,33 @@ class ExperimentBuilder(object):
             while self.state['current_iter'] < (self.args.total_epochs * self.args.total_iter_per_epoch) and \
                     not self.args.evaluate_on_test_set_only:
 
+                # Train Loop
                 for train_sample_idx, train_sample in enumerate(
                         self.data.get_train_batches(total_batches=int(self.args.total_iter_per_epoch *
                                                                       self.args.total_epochs) - self.state[
                                                                       'current_iter'],
                                                     augment_images=self.augment_flag)):
                     
-                    train_losses, total_losses, self.state['current_iter'] = self.train_iteration(
+                    # Includes forward and backward propagations.
+                    train_losses, total_losses = self.train_iteration(
                         train_sample=train_sample,
                         total_losses=self.total_losses,
-                        epoch_idx=(self.state['current_iter'] /
-                                   self.args.total_iter_per_epoch),
-                        pbar_train=pbar_train,
-                        current_iter=self.state['current_iter'],
-                        sample_idx=self.state['current_iter'])
+                        pbar_train=pbar_train)
+
+                    self.state['current_iter'] += 1
 
                     if self.state['current_iter'] % self.args.total_iter_per_epoch == 0:
 
                         total_losses = dict()
                         val_losses = dict()
                         with tqdm.tqdm(total=int(self.args.num_evaluation_tasks / self.args.batch_size)) as pbar_val:
-                            for _, val_sample in enumerate(
-                                    self.data.get_val_batches(total_batches=int(self.args.num_evaluation_tasks / self.args.batch_size),
-                                                              augment_images=False)):
+                            for val_sample in self.data.get_val_batches(
+                                                            total_batches=int(self.args.num_evaluation_tasks / self.args.batch_size),
+                                                            augment_images=False):
                                 val_losses, total_losses = self.evaluation_iteration(val_sample=val_sample,
                                                                                      total_losses=total_losses,
-                                                                                     pbar_val=pbar_val, phase='val')
+                                                                                     pbar_val=pbar_val,
+                                                                                     phase='val')
 
                             if val_losses["val_accuracy_mean"] > self.state['best_val_acc']:
                                 print("Best validation accuracy", val_losses["val_accuracy_mean"])
@@ -356,7 +348,6 @@ class ExperimentBuilder(object):
                                 self.state['best_val_iter'] = self.state['current_iter']
                                 self.state['best_epoch'] = int(
                                     self.state['best_val_iter'] / self.args.total_iter_per_epoch)
-
 
                         self.epoch += 1
                         self.state = self.merge_two_dicts(first_dict=self.merge_two_dicts(first_dict=self.state,

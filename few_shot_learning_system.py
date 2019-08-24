@@ -306,7 +306,7 @@ class MAMLFewShotClassifier(nn.Module):
         :param epoch: the index of the current epoch
         :return: The losses of the ran iteration.
         """
-        epoch = int(epoch)
+
         if self.current_epoch != epoch:
             self.current_epoch = epoch
 
@@ -337,7 +337,6 @@ class MAMLFewShotClassifier(nn.Module):
         """
         Runs an outer loop evaluation step on the meta-model's parameters.
         :param data_batch: input data batch containing the support set and target set input, output pairs
-        :param epoch: the index of the current epoch
         :return: The losses of the ran iteration.
         """
 
