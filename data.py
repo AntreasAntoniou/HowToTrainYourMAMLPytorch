@@ -486,7 +486,7 @@ class FewShotLearningDatasetParallel(Dataset):
         rng.shuffle(selected_classes)
         k_list = rng.randint(0, 4, size=self.num_classes_per_set)
         k_dict = {selected_class: k_item for (selected_class, k_item) in zip(selected_classes, k_list)}
-        episode_labels = [i for i in range(self.num_classes_per_set)]
+        episode_labels = list(range(self.num_classes_per_set))
         class_to_episode_label = {selected_class: episode_label for (selected_class, episode_label) in
                                   zip(selected_classes, episode_labels)}
 
@@ -597,8 +597,7 @@ class MetaLearningSystemDataLoader(object):
         self.dataset.switch_set(set_name="train", current_iter=self.total_train_iters_produced)
         self.dataset.set_augmentation(augment_images=augment_images)
         self.total_train_iters_produced += (self.num_of_gpus * self.batch_size)
-        for sample_id, sample_batched in enumerate(self.get_dataloader()):
-            yield sample_batched
+        return self.get_dataloader()
 
 
     def get_val_batches(self, total_batches=-1, augment_images=False):
@@ -613,8 +612,7 @@ class MetaLearningSystemDataLoader(object):
             self.dataset.data_length['val'] = total_batches * self.dataset.batch_size
         self.dataset.switch_set(set_name="val")
         self.dataset.set_augmentation(augment_images=augment_images)
-        for sample_id, sample_batched in enumerate(self.get_dataloader()):
-            yield sample_batched
+        return self.get_dataloader()
 
 
     def get_test_batches(self, total_batches=-1, augment_images=False):
@@ -629,6 +627,5 @@ class MetaLearningSystemDataLoader(object):
             self.dataset.data_length['test'] = total_batches * self.dataset.batch_size
         self.dataset.switch_set(set_name='test')
         self.dataset.set_augmentation(augment_images=augment_images)
-        for sample_id, sample_batched in enumerate(self.get_dataloader()):
-            yield sample_batched
+        return self.get_dataloader()
 
