@@ -223,9 +223,11 @@ class MAMLFewShotClassifier(nn.Module):
             if not training_phase:
                 self.classifier.restore_backup_stats()
 
+        # Mean aggregate losses and accuracies across tasks
         losses = self.get_across_task_loss_metrics(total_losses=total_losses,
                                                    total_accuracies=total_accuracies)
 
+        # Add importance vectors to losses dict
         for idx, item in enumerate(per_step_loss_importance_vectors):
             losses['importance_vector_{}'.format(idx)] = item.detach().cpu().numpy()
 
