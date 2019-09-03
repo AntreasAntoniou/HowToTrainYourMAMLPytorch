@@ -329,6 +329,7 @@ class ExperimentBuilder(object):
 
                     self.state['current_iter'] += 1
 
+                    # Validation once after each epoch
                     if self.state['current_iter'] % self.args.total_iter_per_epoch == 0:
 
                         total_losses = dict()
