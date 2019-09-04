@@ -275,7 +275,7 @@ class MAMLFewShotClassifier(nn.Module):
                                                      use_second_order=self.args.second_order and
                                                                       epoch > self.args.first_order_to_second_order_epoch,
                                                      use_multi_step_loss_optimization=self.args.use_multi_step_loss_optimization,
-                                                     num_steps=self.args.number_of_training_steps_per_iter,
+                                                     num_inner_steps=self.args.number_of_training_steps_per_iter,
                                                      training_phase=True)
         return losses, per_task_target_preds
 
@@ -288,7 +288,7 @@ class MAMLFewShotClassifier(nn.Module):
         """
         losses, per_task_target_preds = self.forward(data_batch=data_batch, epoch=epoch, use_second_order=False,
                                                      use_multi_step_loss_optimization=True,
-                                                     num_steps=self.args.number_of_evaluation_steps_per_iter,
+                                                     num_inner_steps=self.args.number_of_evaluation_steps_per_iter,
                                                      training_phase=False)
 
         return losses, per_task_target_preds
