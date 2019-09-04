@@ -216,7 +216,7 @@ class FewShotLearningDatasetParallel(Dataset):
             x_loaded = {"train": [], "val": [], "test": []}
 
             for set_key, set_value in dataset_splits.items():
-                print("Currently loading into memory the {} set".format(set_key))
+                print(f"Load {set_key} set into memory.")
                 x_loaded[set_key] = {key: np.zeros(len(value), ) for key, value in set_value.items()}
                 with tqdm.tqdm(total=len(set_value)) as pbar_memory_load:
                     with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
