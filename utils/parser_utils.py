@@ -77,9 +77,6 @@ def get_args():
     if args.name_of_args_json_file is not "None":
         args_dict = extract_args_from_json(args.name_of_args_json_file, args_dict)
 
-    # Set CUDA usage
-    args_dict['use_cuda'] = torch.cuda.is_available() and args_dict['gpu_to_use'] != -1
-
     # Cast "true" or "false" str to bool. Set 'datasets' path relative to repo folder.
     print("TRAINING CONFIGURATIONS:")
     for key in list(args_dict.keys()):
@@ -96,10 +93,13 @@ def get_args():
     args = Bunch(args_dict)
 
     # Set training device
-    if args.use_cuda:
+    if args_dict['gpu_to_use'] != -1:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_to_use)
         device = torch.cuda.current_device()
     else:
         device = torch.device('cpu')
+
+    # Set CUDA usage
+    args.use_cuda = torch.cuda.is_available() and args_dict['gpu_to_use'] != -1
 
     return args, device
