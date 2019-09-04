@@ -141,7 +141,7 @@ class ExperimentBuilder(object):
         train_output_update = self.build_loss_summary_string(losses)
 
         pbar_train.update(1)
-        pbar_train.set_description(f"Epoch {self.epoch:03d}/{self.total_epochs_before_pause} -> {train_output_update}")
+        pbar_train.set_description_str(f"Epoch {self.epoch+1:03d}/{self.total_epochs_before_pause} -> {train_output_update}")
 
         return train_losses, total_losses
 
@@ -167,16 +167,15 @@ class ExperimentBuilder(object):
         val_output_update = self.build_loss_summary_string(losses)
 
         pbar_val.update(1)
-        pbar_val.set_description(f"Validation -> {val_output_update}")
+        pbar_val.set_description_str(f"Validation    -> {val_output_update}")
 
         return val_losses, total_losses
 
-    def test_evaluation_iteration(self, test_sample, model_idx, sample_idx, per_model_per_batch_preds, pbar_test):
+    def test_evaluation_iteration(self, test_sample, model_idx, per_model_per_batch_preds, pbar_test):
         """
         Runs a test iteration, updates the progress bar and returns the per model per batch predictions.
         :param test_sample: A sample from the data provider.
         :param model_idx: Index of the model.
-        :param sample_idx: Index of the current test sample.
         :param per_model_per_batch_preds: per_model_per_batch_preds[model_idx] = per task predictions
         :param pbar_test: The progress bar of the test stage.
         :return: The extended per_model_per_batch_preds
@@ -191,7 +190,7 @@ class ExperimentBuilder(object):
         test_output_update = self.build_loss_summary_string(losses)
 
         pbar_test.update(1)
-        pbar_test.set_description(f"Test -> {test_output_update}")
+        pbar_test.set_description_str(f"Test -> {test_output_update}")
 
         return per_model_per_batch_preds
 
@@ -211,9 +210,7 @@ class ExperimentBuilder(object):
         model.save_model(model_save_dir=os.path.join(self.saved_models_filepath, "train_model_latest"),
                          state=state)
 
-        print("Saved model to", self.saved_models_filepath)
-
-    def pack_and_save_metrics(self, start_time, train_losses, val_losses, state):
+    def pack_and_save_metrics(self, start_time, train_losses, val_losses, state, pbar_train):
         """
         Given current epochs start_time, train losses, val losses and whether to create a new stats csv file, pack stats
         and save into a statistics csv file. Return a new start time for the new epoch.
@@ -221,6 +218,7 @@ class ExperimentBuilder(object):
         :param train_losses: A dictionary with the current train losses
         :param val_losses: A dictionary with the currrent val loss
         :param state: The current state of the experiment
+        :param pbar_train: Progress bar for training phase
         :return: The current time, to be used for the next epoch.
         """
         epoch_summary_losses = self.merge_two_dicts(first_dict=train_losses, second_dict=val_losses)
@@ -245,27 +243,29 @@ class ExperimentBuilder(object):
             self.create_summary_csv = False
 
         start_time = time.time()
-        print("epoch {} -> {}".format(epoch_summary_losses["epoch"], epoch_summary_string))
+        pbar_train.write("epoch {} -> {}".format(epoch_summary_losses["epoch"], epoch_summary_string))
 
         self.summary_statistics_filepath = save_statistics(self.logs_filepath,
                                                            list(epoch_summary_losses.values()))
         return start_time, state
 
-    def evaluate_test_set_using_the_best_models(self, top_n_models):
+    def evaluate_test_set_using_the_best_models(self, top_n):
+        # Choose the best top_n models
         per_epoch_statistics = self.state['per_epoch_statistics']
         val_acc = np.copy(per_epoch_statistics['val_accuracy_mean'])
-        val_idx = np.array([i for i in range(len(val_acc))])
-        sorted_idx = np.argsort(val_acc, axis=0).astype(dtype=np.int32)[::-1][:top_n_models]
+        val_idx = np.arange(len(val_acc))
+        top_n_idx = np.argsort(val_acc, axis=0).astype(dtype=np.int32)[::-1][:top_n]
+        sorted_val_acc = val_acc[top_n_idx]
 
-        sorted_val_acc = val_acc[sorted_idx]
-        val_idx = val_idx[sorted_idx]
-        print(sorted_idx)
-        print(sorted_val_acc)
+        print(f"\nTop {top_n} models chosen:")
+        print(f"Epoch numbers {[idx + 1 for idx in top_n_idx]}")
+        print(f"Mean validation accuracies {sorted_val_acc}")
 
-        top_n_idx = val_idx[:top_n_models]
-        per_model_per_batch_preds = [[] for i in range(top_n_models)]
-        per_model_per_batch_targets = [[] for i in range(top_n_models)]
-        test_losses = [dict() for i in range(top_n_models)]
+        per_model_per_batch_preds = [[] for _ in range(top_n)]
+        per_model_per_batch_targets = [[] for _ in range(top_n)]
+        test_losses = [dict() for _ in range(top_n)]
+
+        # Forward test set for each chosen model
         for idx, model_idx in enumerate(top_n_idx):
             self.state = \
                 self.model.load_model(model_save_dir=self.saved_models_filepath, model_name="train_model",
@@ -274,17 +274,12 @@ class ExperimentBuilder(object):
                 for sample_idx, test_sample in enumerate(
                         self.data.get_test_batches(total_batches=int(self.args.num_evaluation_tasks / self.args.batch_size),
                                                    augment_images=False)):
-                    #print(test_sample[4])
                     per_model_per_batch_targets[idx].extend(np.array(test_sample[3]))
-                    per_model_per_batch_preds = self.test_evaluation_iteration(val_sample=test_sample,
-                                                                               sample_idx=sample_idx,
+                    per_model_per_batch_preds = self.test_evaluation_iteration(test_sample=test_sample,
                                                                                model_idx=idx,
                                                                                per_model_per_batch_preds=per_model_per_batch_preds,
                                                                                pbar_test=pbar_test)
-        # for i in range(top_n_models):
-        #     print("test assertion", 0)
-        #     print(per_model_per_batch_targets[0], per_model_per_batch_targets[i])
-        #     assert np.equal(np.array(per_model_per_batch_targets[0]), np.array(per_model_per_batch_targets[i]))
+            print()
 
         per_batch_preds = np.mean(per_model_per_batch_preds, axis=0)
         per_batch_max = np.argmax(per_batch_preds, axis=2)
@@ -300,6 +295,7 @@ class ExperimentBuilder(object):
         summary_statistics_filepath = save_statistics(self.logs_filepath, list(test_losses.values()),
                                                       create=False, filename="test_summary.csv")
 
+        print()
         print(test_losses)
         print("Saved test performance at", summary_statistics_filepath)
 
@@ -329,50 +325,52 @@ class ExperimentBuilder(object):
 
                     self.state['current_iter'] += 1
 
-                    # Validation once after each epoch
+                    # Perform validation once after each epoch
                     if self.state['current_iter'] % self.args.total_iter_per_epoch == 0:
-
                         total_losses = dict()
                         val_losses = dict()
-                        with tqdm.tqdm(total=int(self.args.num_evaluation_tasks / self.args.batch_size)) as pbar_val:
-                            for val_sample in self.data.get_val_batches(
-                                                            total_batches=int(self.args.num_evaluation_tasks / self.args.batch_size),
-                                                            augment_images=False):
-                                val_losses, total_losses = self.evaluation_iteration(val_sample=val_sample,
-                                                                                     total_losses=total_losses,
-                                                                                     pbar_val=pbar_val,
-                                                                                     phase='val')
 
-                            if val_losses["val_accuracy_mean"] > self.state['best_val_acc']:
-                                print("Best validation accuracy", val_losses["val_accuracy_mean"])
-                                self.state['best_val_acc'] = val_losses["val_accuracy_mean"]
-                                self.state['best_val_iter'] = self.state['current_iter']
-                                self.state['best_epoch'] = int(
-                                    self.state['best_val_iter'] / self.args.total_iter_per_epoch)
+                        pbar_val = tqdm.tqdm(total=int(self.args.num_evaluation_tasks / self.args.batch_size))
+                        for val_sample in self.data.get_val_batches(
+                                                        total_batches=int(self.args.num_evaluation_tasks / self.args.batch_size),
+                                                        augment_images=False):
+                            val_losses, total_losses = self.evaluation_iteration(val_sample=val_sample,
+                                                                                 total_losses=total_losses,
+                                                                                 pbar_val=pbar_val,
+                                                                                 phase='val')
+                        pbar_val.close()
+
+                        if val_losses["val_accuracy_mean"] > self.state['best_val_acc']:
+                            pbar_train.write(f"Best validation accuracy: {val_losses['val_accuracy_mean']}")
+                            self.state['best_val_acc'] = val_losses["val_accuracy_mean"]
+                            self.state['best_val_iter'] = self.state['current_iter']
+                            self.state['best_epoch'] = int(
+                                self.state['best_val_iter'] / self.args.total_iter_per_epoch)
 
                         self.epoch += 1
-                        self.state = self.merge_two_dicts(first_dict=self.merge_two_dicts(first_dict=self.state,
-                                                                                          second_dict=train_losses),
-                                                          second_dict=val_losses)
+                        self.epochs_done_in_this_run += 1
 
+                        temp_state = self.merge_two_dicts(first_dict=self.state, second_dict=train_losses)
+                        self.state = self.merge_two_dicts(first_dict=temp_state, second_dict=val_losses)
+
+                        # Save model and metrics
                         self.save_models(model=self.model, epoch=self.epoch, state=self.state)
-
                         self.start_time, self.state = self.pack_and_save_metrics(start_time=self.start_time,
                                                                                  train_losses=train_losses,
                                                                                  val_losses=val_losses,
-                                                                                 state=self.state)
-
-                        self.total_losses = dict()
-
-                        self.epochs_done_in_this_run += 1
-
+                                                                                 state=self.state,
+                                                                                 pbar_train=pbar_train)
                         save_to_json(filename=os.path.join(self.logs_filepath, "summary_statistics.json"),
                                      dict_to_store=self.state['per_epoch_statistics'])
+                        pbar_train.write(f"Saved model to {self.saved_models_filepath}")
+
+                        # Reset loss dictionary
+                        self.total_losses = dict()
 
                         if self.epochs_done_in_this_run >= self.total_epochs_before_pause:
                             print("RNG SEED:")
                             print(f'train seed: {self.data.dataset.seed["train"]}, val seed: {self.data.dataset.seed["val"]}\n')
-                            print("\nPAUSED TRAINING.")
+                            print("PAUSED TRAINING.")
                             sys.exit()
 
-            self.evaluate_test_set_using_the_best_models(top_n_models=5)
+            self.evaluate_test_set_using_the_best_models(top_n=5)
