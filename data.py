@@ -589,6 +589,7 @@ class MetaLearningSystemDataLoader(object):
         Returns a training batches data_loader
         :param total_batches: The number of batches we want the data loader to sample
         :param augment_images: Whether we want the images to be augmented.
+        :return: Pytorch DataLoader instance for train set
         """
         if total_batches == -1:
             self.dataset.data_length = self.full_data_length
@@ -605,6 +606,7 @@ class MetaLearningSystemDataLoader(object):
         Returns a validation batches data_loader
         :param total_batches: The number of batches we want the data loader to sample
         :param augment_images: Whether we want the images to be augmented.
+        :return: Pytorch DataLoader instance for validation set
         """
         if total_batches == -1:
             self.dataset.data_length = self.full_data_length
@@ -620,6 +622,7 @@ class MetaLearningSystemDataLoader(object):
         Returns a testing batches data_loader
         :param total_batches: The number of batches we want the data loader to sample
         :param augment_images: Whether we want the images to be augmented.
+        :return: Pytorch DataLoader instance for test set
         """
         if total_batches == -1:
             self.dataset.data_length = self.full_data_length
