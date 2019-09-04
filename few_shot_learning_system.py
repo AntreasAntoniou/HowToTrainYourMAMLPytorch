@@ -189,7 +189,7 @@ class MAMLFewShotClassifier(nn.Module):
                                                                weights=names_weights_copy,
                                                                backup_running_statistics= (num_step == 0),
                                                                training=True, num_step=num_step)
-                # Inner loop adaptation
+                # Adaptation with support set loss gradients
                 names_weights_copy = self.apply_inner_loop_update(loss=support_loss,
                                                                   names_weights_copy=names_weights_copy,
                                                                   use_second_order=use_second_order,
@@ -210,7 +210,7 @@ class MAMLFewShotClassifier(nn.Module):
                                                                      num_step=num_step)
                         task_losses.append(target_loss)
 
-            # Predictions of the final inner loop adaptation
+            # Predictions with the final inner loop parameters
             per_task_target_preds[task_id] = target_preds.detach().cpu().numpy()
             _, predicted = torch.max(target_preds.data, 1)
 
