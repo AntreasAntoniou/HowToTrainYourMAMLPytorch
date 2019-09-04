@@ -388,6 +388,5 @@ class MAMLFewShotClassifier(nn.Module):
         """
         filepath = os.path.join(model_save_dir, "{}_{}".format(model_name, model_idx))
         state = torch.load(filepath)
-        state_dict_loaded = state['network']
-        self.load_state_dict(state_dict=state_dict_loaded)
+        self.load_state_dict(state_dict=state['network'])
         return state
