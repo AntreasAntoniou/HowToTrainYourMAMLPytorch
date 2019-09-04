@@ -10,6 +10,5 @@ model = MAMLFewShotClassifier(args=args, device=device,
                               im_shape=(2, args.image_channels,
                                         args.image_height, args.image_width))
 maybe_unzip_dataset(args=args)
-data = MetaLearningSystemDataLoader
-maml_system = ExperimentBuilder(model=model, data=data, args=args, device=device)
+maml_system = ExperimentBuilder(model=model, data=MetaLearningSystemDataLoader, args=args, device=device)
 maml_system.run_experiment()
