@@ -201,6 +201,6 @@ what to fill those with.
 9. Your new scripts can be found in the experiment_scripts, ready to be run.
 
 # Acknowledgments
-Thanks to the University of Edinburgh and ESPRC research council for funding this research.
+Thanks to the University of Edinburgh and EPSRC research council for funding this research.
  
  
