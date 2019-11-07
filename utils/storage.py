@@ -6,7 +6,7 @@ from utils.parser_utils import get_args
 import json
 
 def save_to_json(filename, dict_to_store):
-    with open(os.path.abspath(filename), 'w') as f:
+    with open(filename, 'w') as f:
         json.dump(dict_to_store, fp=f)
 
 def load_from_json(filename):
@@ -15,22 +15,19 @@ def load_from_json(filename):
 
     return load_dict
 
-def save_statistics(experiment_name, line_to_add, filename="summary_statistics.csv", create=False):
-    summary_filename = "{}/{}".format(experiment_name, filename)
-    if create:
-        with open(summary_filename, 'w') as f:
-            writer = csv.writer(f)
-            writer.writerow(line_to_add)
-    else:
-        with open(summary_filename, 'a') as f:
-            writer = csv.writer(f)
-            writer.writerow(line_to_add)
+def save_statistics(logs_filepath, line_to_add, filename="summary_statistics.csv", create=False):
+    summary_filename = "{}/{}".format(logs_filepath, filename)
+    mode = 'w' if create else 'a'
+    
+    with open(summary_filename, mode) as f:
+        writer = csv.writer(f)
+        writer.writerow(line_to_add)
 
     return summary_filename
 
-def load_statistics(experiment_name, filename="summary_statistics.csv"):
+def load_statistics(logs_filepath, filename="summary_statistics.csv"):
     data_dict = dict()
-    summary_filename = "{}/{}".format(experiment_name, filename)
+    summary_filename = "{}/{}".format(logs_filepath, filename)
     with open(summary_filename, 'r') as f:
         lines = f.readlines()
         data_labels = lines[0].replace("\n", "").split(",")
@@ -47,11 +44,13 @@ def load_statistics(experiment_name, filename="summary_statistics.csv"):
 
 
 def build_experiment_folder(experiment_name):
-    experiment_path = os.path.abspath(experiment_name)
+    experiment_path = os.path.join('Experiments', experiment_name)
     saved_models_filepath = "{}/{}".format(experiment_path, "saved_models")
     logs_filepath = "{}/{}".format(experiment_path, "logs")
     samples_filepath = "{}/{}".format(experiment_path, "visual_outputs")
 
+    if not os.path.exists('Experiments'):
+        os.mkdir('Experiments')
     if not os.path.exists(experiment_path):
         os.makedirs(experiment_path)
     if not os.path.exists(logs_filepath):
@@ -65,14 +64,14 @@ def build_experiment_folder(experiment_name):
     outputs = (os.path.abspath(item) for item in outputs)
     return outputs
 
-def get_best_validation_model_statistics(experiment_name, filename="summary_statistics.csv"):
+def get_best_validation_model_statistics(logs_filepath, filename="summary_statistics.csv"):
     """
     Returns the best val epoch and val accuracy from a log csv file
     :param log_dir: The log directory the file is saved in
-    :param statistics_file_name: The log file name
+    :param filename: The log file name
     :return: The best validation accuracy and the epoch at which it is produced
     """
-    log_file_dict = load_statistics(filename=filename, experiment_name=experiment_name)
+    log_file_dict = load_statistics(logs_filepath, filename=filename)
     d_val_loss = np.array(log_file_dict['total_d_val_loss_mean'], dtype=np.float32)
     best_d_val_loss = np.min(d_val_loss)
     best_d_val_epoch = np.argmin(d_val_loss)

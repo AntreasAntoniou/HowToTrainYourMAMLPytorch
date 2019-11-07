@@ -121,8 +121,7 @@ class MAMLFewShotClassifier(nn.Module):
         """
         self.classifier.zero_grad(names_weights_copy)
 
-        grads = torch.autograd.grad(loss, names_weights_copy.values(),
-                                    create_graph=use_second_order)
+        grads = torch.autograd.grad(loss, names_weights_copy.values(), create_graph=use_second_order)
         names_grads_wrt_params = dict(zip(names_weights_copy.keys(), grads))
 
         names_weights_copy = self.inner_loop_optimizer.update_params(names_weights_dict=names_weights_copy,
@@ -139,7 +138,7 @@ class MAMLFewShotClassifier(nn.Module):
 
         return losses
 
-    def forward(self, data_batch, epoch, use_second_order, use_multi_step_loss_optimization, num_steps, training_phase):
+    def forward(self, data_batch, epoch, use_second_order, use_multi_step_loss_optimization, num_inner_steps, training_phase):
         """
         Runs a forward outer loop pass on the batch of tasks using the MAML/++ framework.
         :param data_batch: A data batch containing the support and target sets.
@@ -147,20 +146,23 @@ class MAMLFewShotClassifier(nn.Module):
         :param use_second_order: A boolean saying whether to use second order derivatives.
         :param use_multi_step_loss_optimization: Whether to optimize on the outer loop using just the last step's
         target loss (True) or whether to use multi step loss which improves the stability of the system (False)
-        :param num_steps: Number of inner loop steps.
+        :param num_inner_steps: Number of inner loop steps.
         :param training_phase: Whether this is a training phase (True) or an evaluation phase (False)
         :return: A dictionary with the collected losses of the current outer forward propagation.
         """
         x_support_set, x_target_set, y_support_set, y_target_set = data_batch
 
+        # num of batches, num of classes per set, num of samples per class
         [b, ncs, spc] = y_support_set.shape
 
         self.num_classes_per_set = ncs
 
         total_losses = []
         total_accuracies = []
-        per_task_target_preds = [[] for i in range(len(x_target_set))]
+        per_task_target_preds = [[] for _ in range(len(x_target_set))]
         self.classifier.zero_grad()
+
+        # Outer loop
         for task_id, (x_support_set_task, y_support_set_task, x_target_set_task, y_target_set_task) in \
                 enumerate(zip(x_support_set,
                               y_support_set,
@@ -169,29 +171,30 @@ class MAMLFewShotClassifier(nn.Module):
             task_losses = []
             task_accuracies = []
             per_step_loss_importance_vectors = self.get_per_step_loss_importance_vector()
+
+            # Initialization parameters before adaptation
             names_weights_copy = self.get_inner_loop_parameter_dict(self.classifier.named_parameters())
 
             n, s, c, h, w = x_target_set_task.shape
-
             x_support_set_task = x_support_set_task.view(-1, c, h, w)
             y_support_set_task = y_support_set_task.view(-1)
             x_target_set_task = x_target_set_task.view(-1, c, h, w)
             y_target_set_task = y_target_set_task.view(-1)
 
-            for num_step in range(num_steps):
-
+            # Inner loop
+            for num_step in range(num_inner_steps):
+                # Forward on support set
                 support_loss, support_preds = self.net_forward(x=x_support_set_task,
                                                                y=y_support_set_task,
                                                                weights=names_weights_copy,
-                                                               backup_running_statistics=
-                                                               True if (num_step == 0) else False,
+                                                               backup_running_statistics= (num_step == 0),
                                                                training=True, num_step=num_step)
-
+                # Adaptation with support set loss gradients
                 names_weights_copy = self.apply_inner_loop_update(loss=support_loss,
                                                                   names_weights_copy=names_weights_copy,
                                                                   use_second_order=use_second_order,
                                                                   current_step_idx=num_step)
-
+                # Forward on query set
                 if use_multi_step_loss_optimization and training_phase and epoch < self.args.multi_step_loss_num_epochs:
                     target_loss, target_preds = self.net_forward(x=x_target_set_task,
                                                                  y=y_target_set_task, weights=names_weights_copy,
@@ -207,6 +210,7 @@ class MAMLFewShotClassifier(nn.Module):
                                                                      num_step=num_step)
                         task_losses.append(target_loss)
 
+            # Predictions with the final inner loop parameters
             per_task_target_preds[task_id] = target_preds.detach().cpu().numpy()
             _, predicted = torch.max(target_preds.data, 1)
 
@@ -215,14 +219,17 @@ class MAMLFewShotClassifier(nn.Module):
             total_losses.append(task_losses)
             total_accuracies.extend(accuracy)
 
+            # Restoring batchnorm statistics
             if not training_phase:
                 self.classifier.restore_backup_stats()
 
+        # Mean aggregate losses and accuracies across tasks
         losses = self.get_across_task_loss_metrics(total_losses=total_losses,
                                                    total_accuracies=total_accuracies)
 
+        # Add importance vectors to losses dict
         for idx, item in enumerate(per_step_loss_importance_vectors):
-            losses['loss_importance_vector_{}'.format(idx)] = item.detach().cpu().numpy()
+            losses['importance_vector_{}'.format(idx)] = item.detach().cpu().numpy()
 
         return losses, per_task_target_preds
 
@@ -268,7 +275,7 @@ class MAMLFewShotClassifier(nn.Module):
                                                      use_second_order=self.args.second_order and
                                                                       epoch > self.args.first_order_to_second_order_epoch,
                                                      use_multi_step_loss_optimization=self.args.use_multi_step_loss_optimization,
-                                                     num_steps=self.args.number_of_training_steps_per_iter,
+                                                     num_inner_steps=self.args.number_of_training_steps_per_iter,
                                                      training_phase=True)
         return losses, per_task_target_preds
 
@@ -281,7 +288,7 @@ class MAMLFewShotClassifier(nn.Module):
         """
         losses, per_task_target_preds = self.forward(data_batch=data_batch, epoch=epoch, use_second_order=False,
                                                      use_multi_step_loss_optimization=True,
-                                                     num_steps=self.args.number_of_evaluation_steps_per_iter,
+                                                     num_inner_steps=self.args.number_of_evaluation_steps_per_iter,
                                                      training_phase=False)
 
         return losses, per_task_target_preds
@@ -306,8 +313,7 @@ class MAMLFewShotClassifier(nn.Module):
         :param epoch: the index of the current epoch
         :return: The losses of the ran iteration.
         """
-        epoch = int(epoch)
-        self.scheduler.step(epoch=epoch)
+
         if self.current_epoch != epoch:
             self.current_epoch = epoch
 
@@ -329,6 +335,8 @@ class MAMLFewShotClassifier(nn.Module):
         losses['learning_rate'] = self.scheduler.get_lr()[0]
         self.optimizer.zero_grad()
         self.zero_grad()
+        
+        self.scheduler.step(epoch=epoch)
 
         return losses, per_task_target_preds
 
@@ -336,7 +344,6 @@ class MAMLFewShotClassifier(nn.Module):
         """
         Runs an outer loop evaluation step on the meta-model's parameters.
         :param data_batch: input data batch containing the support set and target set input, output pairs
-        :param epoch: the index of the current epoch
         :return: The losses of the ran iteration.
         """
 
@@ -381,6 +388,5 @@ class MAMLFewShotClassifier(nn.Module):
         """
         filepath = os.path.join(model_save_dir, "{}_{}".format(model_name, model_idx))
         state = torch.load(filepath)
-        state_dict_loaded = state['network']
-        self.load_state_dict(state_dict=state_dict_loaded)
+        self.load_state_dict(state_dict=state['network'])
         return state
