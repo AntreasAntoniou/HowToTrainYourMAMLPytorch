@@ -74,15 +74,16 @@ def get_args():
 
 
     args.use_cuda = torch.cuda.is_available()
+    if torch.cuda.is_available():  # checks whether a cuda gpu is available and whether the gpu flag is True
+        device = torch.cuda.current_device()
 
-    if args.gpu_to_use == -1:
-        args.use_cuda = False
+        print("use GPU", device)
+        print("GPU ID {}".format(torch.cuda.current_device()))
 
-    if args.use_cuda:
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_to_use)
-        device = cuda.current_device()
     else:
-        device = torch.device('cpu')
+        print("use CPU")
+        device = torch.device('cpu')  # sets the device to be CPU
+
 
     return args, device
 

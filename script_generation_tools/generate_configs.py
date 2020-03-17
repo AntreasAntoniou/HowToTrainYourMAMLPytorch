@@ -1,7 +1,9 @@
 import os
 from collections import namedtuple
 
-from utils.parser_utils import Bunch
+class Bunch(object):
+    def __init__(self, adict):
+        self.__dict__.update(adict)
 
 seed_list = [0, 1, 2]
 

@@ -126,7 +126,7 @@ To run an experiment from the paper on Omniglot:
 1. Activate your conda environment ```conda activate pytorch_meta_learning_env```
 2. cd experiment_scripts
 3. Find which experiment you want to run.
-4. ```bash experiment_script.sh```
+4. ```bash experiment_script.sh gpu_ids_separated_by_spaces```
 
 Note: By downloading and using the mini-imagenet datasets, you accept terms and conditions found in [imagenet_license.md](https://github.com/AntreasAntoniou/HowToTrainYourMAMLPytorch/blob/master/imagenet_license.md) 
 
@@ -136,7 +136,7 @@ To run an experiment from the paper on Mini-Imagenet:
 3. copy the .pbzip file in datasets
 4. cd experiment_scripts
 5. Find which experiment you want to run.
-6. ```bash experiment_script.sh```
+6. ```bash experiment_script.sh gpu_ids_separated_by_spaces```
 
 To run a custom/new experiment on any dataset:
 1. Activate your conda environment ```conda activate pytorch_meta_learning_env```

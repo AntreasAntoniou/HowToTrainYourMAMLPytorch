@@ -70,6 +70,16 @@ class MAMLFewShotClassifier(nn.Module):
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer=self.optimizer, T_max=self.args.total_epochs,
                                                               eta_min=self.args.min_learning_rate)
 
+        self.device = torch.device('cpu')
+        if torch.cuda.is_available():
+            if torch.cuda.device_count() > 1:
+                self.to(torch.cuda.current_device())
+                self.classifier = nn.DataParallel(module=self.classifier)
+            else:
+                self.to(torch.cuda.current_device())
+
+            self.device = torch.cuda.current_device()
+
     def get_per_step_loss_importance_vector(self):
         """
         Generates a tensor of dimensionality (num_inner_loop_steps) indicating the importance of each step's target
@@ -119,15 +129,34 @@ class MAMLFewShotClassifier(nn.Module):
         :param current_step_idx: Current step's index.
         :return: A dictionary with the updated weights (name, param)
         """
-        self.classifier.zero_grad(names_weights_copy)
+        num_gpus = torch.cuda.device_count()
+        if num_gpus > 1:
+            self.classifier.module.zero_grad(params=names_weights_copy)
+        else:
+            self.classifier.zero_grad(params=names_weights_copy)
 
         grads = torch.autograd.grad(loss, names_weights_copy.values(),
-                                    create_graph=use_second_order)
-        names_grads_wrt_params = dict(zip(names_weights_copy.keys(), grads))
+                                    create_graph=use_second_order, allow_unused=True)
+        names_grads_copy = dict(zip(names_weights_copy.keys(), grads))
+
+        names_weights_copy = {key: value[0] for key, value in names_weights_copy.items()}
+
+        for key, grad in names_grads_copy.items():
+            if grad is None:
+                print('Grads not found for inner loop parameter', key)
+            names_grads_copy[key] = names_grads_copy[key].sum(dim=0)
+
 
         names_weights_copy = self.inner_loop_optimizer.update_params(names_weights_dict=names_weights_copy,
-                                                                     names_grads_wrt_params_dict=names_grads_wrt_params,
+                                                                     names_grads_wrt_params_dict=names_grads_copy,
                                                                      num_step=current_step_idx)
+
+        num_devices = torch.cuda.device_count() if torch.cuda.is_available() else 1
+        names_weights_copy = {
+            name.replace('module.', ''): value.unsqueeze(0).repeat(
+                [num_devices] + [1 for i in range(len(value.shape))]) for
+            name, value in names_weights_copy.items()}
+
 
         return names_weights_copy
 
@@ -170,6 +199,13 @@ class MAMLFewShotClassifier(nn.Module):
             task_accuracies = []
             per_step_loss_importance_vectors = self.get_per_step_loss_importance_vector()
             names_weights_copy = self.get_inner_loop_parameter_dict(self.classifier.named_parameters())
+
+            num_devices = torch.cuda.device_count() if torch.cuda.is_available() else 1
+
+            names_weights_copy = {
+                name.replace('module.', ''): value.unsqueeze(0).repeat(
+                    [num_devices] + [1 for i in range(len(value.shape))]) for
+                name, value in names_weights_copy.items()}
 
             n, s, c, h, w = x_target_set_task.shape
 

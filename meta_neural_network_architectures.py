@@ -19,6 +19,9 @@ def extract_top_level_dict(current_dict):
     output_dict = dict()
     for key in current_dict.keys():
         name = key.replace("layer_dict.", "")
+        name = name.replace("layer_dict.", "")
+        name = name.replace("block_dict.", "")
+        name = name.replace("module-", "")
         top_level = name.split(".")[0]
         sub_level = ".".join(name.split(".")[1:])
 
@@ -633,6 +636,7 @@ class VGGReLUNormNetwork(nn.Module):
         param_dict = dict()
 
         if params is not None:
+            params = {key: value[0] for key, value in params.items()}
             param_dict = extract_top_level_dict(current_dict=params)
 
         # print('top network', param_dict.keys())
