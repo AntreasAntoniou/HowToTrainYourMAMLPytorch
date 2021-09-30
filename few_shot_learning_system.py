@@ -108,16 +108,16 @@ class MAMLFewShotClassifier(nn.Module):
         :param params: A dictionary of the network's parameters.
         :return: A dictionary of the parameters to use for the inner loop optimization process.
         """
-        param_dict = dict()
-        for name, param in params:
-            if param.requires_grad:
-                if self.args.enable_inner_loop_optimizable_bn_params:
-                    param_dict[name] = param.to(device=self.device)
-                else:
-                    if "norm_layer" not in name:
-                        param_dict[name] = param.to(device=self.device)
-
-        return param_dict
+        return {
+            name: param.to(device=self.device)
+            for name, param in params
+            if param.requires_grad
+            and (
+                not self.args.enable_inner_loop_optimizable_bn_params
+                and "norm_layer" not in name
+                or self.args.enable_inner_loop_optimizable_bn_params
+            )
+        }
 
     def apply_inner_loop_update(self, loss, names_weights_copy, use_second_order, current_step_idx):
         """
@@ -161,9 +161,8 @@ class MAMLFewShotClassifier(nn.Module):
         return names_weights_copy
 
     def get_across_task_loss_metrics(self, total_losses, total_accuracies):
-        losses = dict()
+        losses = {'loss': torch.mean(torch.stack(total_losses))}
 
-        losses['loss'] = torch.mean(torch.stack(total_losses))
         losses['accuracy'] = np.mean(total_accuracies)
 
         return losses
@@ -190,13 +189,12 @@ class MAMLFewShotClassifier(nn.Module):
         total_accuracies = []
         per_task_target_preds = [[] for i in range(len(x_target_set))]
         self.classifier.zero_grad()
-        for task_id, (x_support_set_task, y_support_set_task, x_target_set_task, y_target_set_task) in \
-                enumerate(zip(x_support_set,
+        task_accuracies = []
+        for task_id, (x_support_set_task, y_support_set_task, x_target_set_task, y_target_set_task) in enumerate(zip(x_support_set,
                               y_support_set,
                               x_target_set,
                               y_target_set)):
             task_losses = []
-            task_accuracies = []
             per_step_loss_importance_vectors = self.get_per_step_loss_importance_vector()
             names_weights_copy = self.get_inner_loop_parameter_dict(self.classifier.named_parameters())
 
@@ -216,12 +214,15 @@ class MAMLFewShotClassifier(nn.Module):
 
             for num_step in range(num_steps):
 
-                support_loss, support_preds = self.net_forward(x=x_support_set_task,
-                                                               y=y_support_set_task,
-                                                               weights=names_weights_copy,
-                                                               backup_running_statistics=
-                                                               True if (num_step == 0) else False,
-                                                               training=True, num_step=num_step)
+                support_loss, support_preds = self.net_forward(
+                    x=x_support_set_task,
+                    y=y_support_set_task,
+                    weights=names_weights_copy,
+                    backup_running_statistics=num_step == 0,
+                    training=True,
+                    num_step=num_step,
+                )
+
 
                 names_weights_copy = self.apply_inner_loop_update(loss=support_loss,
                                                                   names_weights_copy=names_weights_copy,
@@ -235,13 +236,12 @@ class MAMLFewShotClassifier(nn.Module):
                                                                  num_step=num_step)
 
                     task_losses.append(per_step_loss_importance_vectors[num_step] * target_loss)
-                else:
-                    if num_step == (self.args.number_of_training_steps_per_iter - 1):
-                        target_loss, target_preds = self.net_forward(x=x_target_set_task,
-                                                                     y=y_target_set_task, weights=names_weights_copy,
-                                                                     backup_running_statistics=False, training=True,
-                                                                     num_step=num_step)
-                        task_losses.append(target_loss)
+                elif num_step == (self.args.number_of_training_steps_per_iter - 1):
+                    target_loss, target_preds = self.net_forward(x=x_target_set_task,
+                                                                 y=y_target_set_task, weights=names_weights_copy,
+                                                                 backup_running_statistics=False, training=True,
+                                                                 num_step=num_step)
+                    task_losses.append(target_loss)
 
             per_task_target_preds[task_id] = target_preds.detach().cpu().numpy()
             _, predicted = torch.max(target_preds.data, 1)

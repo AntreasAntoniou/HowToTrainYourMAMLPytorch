@@ -40,7 +40,7 @@ def generate_combinations(config):
     combos = []
 
     for key, item in config._asdict().items():
-        if len(combos) == 0:
+        if not combos:
             combos = [[i] for i in item]
         else:
             combos = [combo + [choice] for combo in combos for choice in item]
@@ -50,9 +50,11 @@ def generate_combinations(config):
     key_list = list(key_list)
 
     for combo in combos:
-        temp_dict = dict()
-        for j in range(len(combo)):
-            temp_dict[key_list[j].replace('_range', '')] = combo[j]
+        temp_dict = {
+            key_list[j].replace('_range', ''): combo[j]
+            for j in range(len(combo))
+        }
+
         named_configs.append(temp_dict)
     return named_configs
 

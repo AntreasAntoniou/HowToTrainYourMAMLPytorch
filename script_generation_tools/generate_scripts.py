@@ -21,9 +21,7 @@ def fill_template(template_list, execution_script, experiment_config):
     execution_line = execution_line.replace('$execution_script$', execution_script)
     execution_line = execution_line.replace('$experiment_config$', experiment_config)
     template_list[-1] = execution_line
-    script_text = ''.join(template_list)
-
-    return script_text
+    return ''.join(template_list)
 
 def write_text_to_file(text, filepath):
     with open(filepath, mode='w') as filewrite:

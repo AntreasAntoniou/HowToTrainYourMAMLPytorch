@@ -23,12 +23,8 @@ class ExperimentBuilder(object):
         self.saved_models_filepath, self.logs_filepath, self.samples_filepath = build_experiment_folder(
             experiment_name=self.args.experiment_name)
 
-        self.total_losses = dict()
-        self.state = dict()
-        self.state['best_val_acc'] = 0.
-        self.state['best_val_iter'] = 0
-        self.state['current_iter'] = 0
-        self.state['current_iter'] = 0
+        self.total_losses = {}
+        self.state = {'best_val_acc': 0.0, 'best_val_iter': 0, 'current_iter': 0}
         self.start_epoch = 0
         self.max_models_to_save = self.args.max_models_to_save
         self.create_summary_csv = False
@@ -61,7 +57,7 @@ class ExperimentBuilder(object):
         self.total_epochs_before_pause = self.args.total_epochs_before_pause
         self.state['best_epoch'] = int(self.state['best_val_iter'] / self.args.total_iter_per_epoch)
         self.epoch = int(self.state['current_iter'] / self.args.total_iter_per_epoch)
-        self.augment_flag = True if 'omniglot' in self.args.dataset_name.lower() else False
+        self.augment_flag = 'omniglot' in self.args.dataset_name.lower()
         self.start_time = time.time()
         self.epochs_done_in_this_run = 0
         print(self.state['current_iter'], int(self.args.total_iter_per_epoch * self.args.total_epochs))
@@ -75,7 +71,7 @@ class ExperimentBuilder(object):
         :return: A new summary dict with the updated summary statistics information.
         """
         if summary_losses is None:
-            summary_losses = dict()
+            summary_losses = {}
 
         for key in total_losses:
             summary_losses["{}_{}_mean".format(phase, key)] = np.mean(total_losses[key])
@@ -223,7 +219,7 @@ class ExperimentBuilder(object):
         epoch_summary_losses = self.merge_two_dicts(first_dict=train_losses, second_dict=val_losses)
 
         if 'per_epoch_statistics' not in state:
-            state['per_epoch_statistics'] = dict()
+            state['per_epoch_statistics'] = {}
 
         for key, value in epoch_summary_losses.items():
 
@@ -309,7 +305,7 @@ class ExperimentBuilder(object):
         will return the test set evaluation results on the best performing validation model.
         """
         with tqdm.tqdm(initial=self.state['current_iter'],
-                       total=int(self.args.total_iter_per_epoch * self.args.total_epochs)) as pbar_train:
+                           total=int(self.args.total_iter_per_epoch * self.args.total_epochs)) as pbar_train:
 
             while (self.state['current_iter'] < (self.args.total_epochs * self.args.total_iter_per_epoch)) and (self.args.evaluate_on_test_set_only == False):
 
@@ -330,8 +326,8 @@ class ExperimentBuilder(object):
 
                     if self.state['current_iter'] % self.args.total_iter_per_epoch == 0:
 
-                        total_losses = dict()
-                        val_losses = dict()
+                        total_losses = {}
+                        val_losses = {}
                         with tqdm.tqdm(total=int(self.args.num_evaluation_tasks / self.args.batch_size)) as pbar_val:
                             for _, val_sample in enumerate(
                                     self.data.get_val_batches(total_batches=int(self.args.num_evaluation_tasks / self.args.batch_size),
@@ -361,7 +357,7 @@ class ExperimentBuilder(object):
                                                                                  val_losses=val_losses,
                                                                                  state=self.state)
 
-                        self.total_losses = dict()
+                        self.total_losses = {}
 
                         self.epochs_done_in_this_run += 1
 
