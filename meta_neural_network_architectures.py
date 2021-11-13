@@ -16,7 +16,7 @@ def extract_top_level_dict(current_dict):
     :param key_exists: If none then assume new dict, else load existing dict and add new key->value pairs to it.
     :return: A dictionary graph of the params already added to the graph.
     """
-    output_dict = dict()
+    output_dict = {}
     for key in current_dict.keys():
         name = key.replace("layer_dict.", "")
         name = name.replace("layer_dict.", "")
@@ -25,16 +25,15 @@ def extract_top_level_dict(current_dict):
         top_level = name.split(".")[0]
         sub_level = ".".join(name.split(".")[1:])
 
-        if top_level not in output_dict:
-            if sub_level == "":
-                output_dict[top_level] = current_dict[key]
-            else:
-                output_dict[top_level] = {sub_level: current_dict[key]}
-        else:
+        if top_level in output_dict:
             new_item = {key: value for key, value in output_dict[top_level].items()}
             new_item[sub_level] = current_dict[key]
             output_dict[top_level] = new_item
 
+        elif sub_level == "":
+            output_dict[top_level] = current_dict[key]
+        else:
+            output_dict[top_level] = {sub_level: current_dict[key]}
     #print(current_dict.keys(), output_dict.keys())
     return output_dict
 
@@ -81,17 +80,21 @@ class MetaConv2dLayer(nn.Module):
             else:
                 (weight) = params["weight"]
                 bias = None
+        elif self.use_bias:
+            weight, bias = self.weight, self.bias
         else:
-            #print("No inner loop params")
-            if self.use_bias:
-                weight, bias = self.weight, self.bias
-            else:
-                weight = self.weight
-                bias = None
+            weight = self.weight
+            bias = None
 
-        out = F.conv2d(input=x, weight=weight, bias=bias, stride=self.stride,
-                       padding=self.padding, dilation=self.dilation_rate, groups=self.groups)
-        return out
+        return F.conv2d(
+            input=x,
+            weight=weight,
+            bias=bias,
+            stride=self.stride,
+            padding=self.padding,
+            dilation=self.dilation_rate,
+            groups=self.groups,
+        )
 
 
 class MetaLinearLayer(nn.Module):
@@ -130,18 +133,12 @@ class MetaLinearLayer(nn.Module):
             else:
                 (weight) = params["weights"]
                 bias = None
+        elif self.use_bias:
+            weight, bias = self.weights, self.bias
         else:
-            pass
-            #print('no inner loop params', self)
-
-            if self.use_bias:
-                weight, bias = self.weights, self.bias
-            else:
-                weight = self.weights
-                bias = None
-        # print(x.shape)
-        out = F.linear(input=x, weight=weight, bias=bias)
-        return out
+            weight = self.weights
+            bias = None
+        return F.linear(input=x, weight=weight, bias=bias)
 
 class MetaBatchNormLayer(nn.Module):
     def __init__(self, num_features, device, args, eps=1e-5, momentum=0.1, affine=True,
@@ -229,10 +226,12 @@ class MetaBatchNormLayer(nn.Module):
         if self.use_per_step_bn_statistics:
             running_mean = self.running_mean[num_step]
             running_var = self.running_var[num_step]
-            if params is None:
-                if not self.args.enable_inner_loop_optimizable_bn_params:
-                    bias = self.bias[num_step]
-                    weight = self.weight[num_step]
+            if (
+                params is None
+                and not self.args.enable_inner_loop_optimizable_bn_params
+            ):
+                bias = self.bias[num_step]
+                weight = self.weight[num_step]
         else:
             running_mean = None
             running_var = None
@@ -244,10 +243,8 @@ class MetaBatchNormLayer(nn.Module):
 
         momentum = self.momentum
 
-        output = F.batch_norm(input, running_mean, running_var, weight, bias,
+        return F.batch_norm(input, running_mean, running_var, weight, bias,
                               training=True, momentum=momentum, eps=self.eps)
-
-        return output
 
     def restore_backup_stats(self):
         """
@@ -517,9 +514,8 @@ class MetaNormLayerConvReLU(nn.Module):
         if params is not None:
             params = extract_top_level_dict(current_dict=params)
 
-            if self.normalization:
-                if 'norm_layer' in params:
-                    batch_norm_params = params['norm_layer']
+            if self.normalization and 'norm_layer' in params:
+                batch_norm_params = params['norm_layer']
 
             conv_params = params['conv']
         else:
@@ -633,7 +629,7 @@ class VGGReLUNormNetwork(nn.Module):
         then used to reset the stats back to a previous state (usually after an eval loop, when we want to throw away stored statistics)
         :return: Logits of shape b, num_output_classes.
         """
-        param_dict = dict()
+        param_dict = {}
 
         if params is not None:
             params = {key: value[0] for key, value in params.items()}
@@ -666,19 +662,23 @@ class VGGReLUNormNetwork(nn.Module):
     def zero_grad(self, params=None):
         if params is None:
             for param in self.parameters():
-                if param.requires_grad == True:
-                    if param.grad is not None:
-                        if torch.sum(param.grad) > 0:
-                            print(param.grad)
-                            param.grad.zero_()
+                if (
+                    param.requires_grad == True
+                    and param.grad is not None
+                    and torch.sum(param.grad) > 0
+                ):
+                    print(param.grad)
+                    param.grad.zero_()
         else:
             for name, param in params.items():
-                if param.requires_grad == True:
-                    if param.grad is not None:
-                        if torch.sum(param.grad) > 0:
-                            print(param.grad)
-                            param.grad.zero_()
-                            params[name].grad = None
+                if (
+                    param.requires_grad == True
+                    and param.grad is not None
+                    and torch.sum(param.grad) > 0
+                ):
+                    print(param.grad)
+                    param.grad.zero_()
+                    params[name].grad = None
 
     def restore_backup_stats(self):
         """

@@ -29,7 +29,7 @@ def save_statistics(experiment_name, line_to_add, filename="summary_statistics.c
     return summary_filename
 
 def load_statistics(experiment_name, filename="summary_statistics.csv"):
-    data_dict = dict()
+    data_dict = {}
     summary_filename = "{}/{}".format(experiment_name, filename)
     with open(summary_filename, 'r') as f:
         lines = f.readlines()
@@ -82,12 +82,9 @@ def get_best_validation_model_statistics(experiment_name, filename="summary_stat
 def create_json_experiment_log(experiment_log_dir, args, log_name="experiment_log.json"):
     summary_filename = "{}/{}".format(experiment_log_dir, log_name)
 
-    experiment_summary_dict = dict()
+    experiment_summary_dict = {key: value for key, value in vars(args).items()}
 
-    for key, value in vars(args).items():
-        experiment_summary_dict[key] = value
-
-    experiment_summary_dict["epoch_stats"] = dict()
+    experiment_summary_dict["epoch_stats"] = {}
     timestamp = datetime.datetime.now().timestamp()
     experiment_summary_dict["experiment_status"] = [(timestamp, "initialization")]
     experiment_summary_dict["experiment_initialization_time"] = timestamp

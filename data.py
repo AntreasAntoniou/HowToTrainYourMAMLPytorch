@@ -21,13 +21,14 @@ class rotate_image(object):
         self.channels = channels
 
     def __call__(self, image):
-        if self.channels == 1 and len(image.shape) == 3:
-            image = image[:, :, 0]
-            image = np.expand_dims(image, axis=2)
+        if self.channels == 1:
+            if len(image.shape) == 3:
+                image = image[:, :, 0]
+                image = np.expand_dims(image, axis=2)
 
-        elif self.channels == 1 and len(image.shape) == 4:
-            image = image[:, :, :, 0]
-            image = np.expand_dims(image, axis=3)
+            elif len(image.shape) == 4:
+                image = image[:, :, :, 0]
+                image = np.expand_dims(image, axis=3)
 
         image = np.rot90(image, k=self.k).copy()
         return image
@@ -66,14 +67,13 @@ def augment_image(image, k, channels, augment_bool, args, dataset_name):
                     image = transform_current(image)
             output_images.append(image)
         image = torch.stack(output_images)
+    elif augment_bool is True:
+        # meanstd transformation
+        for transform_current in transform_train:
+            image = transform_current(image)
     else:
-        if augment_bool is True:
-            # meanstd transformation
-            for transform_current in transform_train:
-                image = transform_current(image)
-        else:
-            for transform_current in transform_evaluation:
-                image = transform_current(image)
+        for transform_current in transform_evaluation:
+            image = transform_current(image)
     return image
 
 
@@ -177,7 +177,7 @@ class FewShotLearningDatasetParallel(Dataset):
 
         if self.args.sets_are_pre_split == True:
             data_image_paths, index_to_label_name_dict_file, label_to_index = self.load_datapaths()
-            dataset_splits = dict()
+            dataset_splits = {}
             for key, value in data_image_paths.items():
                 key = self.get_label_from_index(index=key)
                 bits = key.split("/")
@@ -202,9 +202,9 @@ class FewShotLearningDatasetParallel(Dataset):
                                               int(np.sum(self.train_val_test_split[:2]) * total_label_types), \
                                               int(total_label_types)
             print(x_train_id, x_val_id, x_test_id)
-            x_train_classes = (class_key for class_key in list(data_image_paths.keys())[:x_train_id])
-            x_val_classes = (class_key for class_key in list(data_image_paths.keys())[x_train_id:x_val_id])
-            x_test_classes = (class_key for class_key in list(data_image_paths.keys())[x_val_id:x_test_id])
+            x_train_classes = iter(list(data_image_paths.keys())[:x_train_id])
+            x_val_classes = iter(list(data_image_paths.keys())[x_train_id:x_val_id])
+            x_test_classes = iter(list(data_image_paths.keys())[x_val_id:x_test_id])
             x_train, x_val, x_test = {class_key: data_image_paths[class_key] for class_key in x_train_classes}, \
                                      {class_key: data_image_paths[class_key] for class_key in x_val_classes}, \
                                      {class_key: data_image_paths[class_key] for class_key in x_test_classes},
@@ -524,8 +524,7 @@ class FewShotLearningDatasetParallel(Dataset):
         return support_set_images, target_set_images, support_set_labels, target_set_labels, seed
 
     def __len__(self):
-        total_samples = self.data_length[self.current_set_name]
-        return total_samples
+        return self.data_length[self.current_set_name]
 
     def length(self, set_name):
         self.switch_set(set_name=set_name)

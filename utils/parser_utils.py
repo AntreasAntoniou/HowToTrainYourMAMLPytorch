@@ -100,11 +100,7 @@ def extract_args_from_json(json_file_path, args_dict):
         summary_dict = json.load(fp=f)
 
     for key in summary_dict.keys():
-        if "continue_from" in key:
-            pass
-        elif "gpu_to_use" in key:
-            pass
-        else:
+        if "continue_from" not in key and "gpu_to_use" not in key:
             args_dict[key] = summary_dict[key]
 
     return args_dict

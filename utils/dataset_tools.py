@@ -38,7 +38,11 @@ def maybe_unzip_dataset(args):
                 total_files == 3 and 'mini_imagenet_pkl' in datasets[dataset_idx]):
             print("file count is correct")
             done = True
-        elif datasets[dataset_idx] != 'omniglot_dataset' and datasets[dataset_idx] != 'mini_imagenet' and datasets[dataset_idx] != 'mini_imagenet_pkl':
+        elif datasets[dataset_idx] not in [
+            'omniglot_dataset',
+            'mini_imagenet',
+            'mini_imagenet_pkl',
+        ]:
             done = True
             print("using new dataset")
 
