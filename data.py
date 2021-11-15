@@ -202,9 +202,9 @@ class FewShotLearningDatasetParallel(Dataset):
                                               int(np.sum(self.train_val_test_split[:2]) * total_label_types), \
                                               int(total_label_types)
             print(x_train_id, x_val_id, x_test_id)
-            x_train_classes = iter(list(data_image_paths.keys())[:x_train_id])
-            x_val_classes = iter(list(data_image_paths.keys())[x_train_id:x_val_id])
-            x_test_classes = iter(list(data_image_paths.keys())[x_val_id:x_test_id])
+            x_train_classes = (class_key for class_key in list(data_image_paths.keys())[:x_train_id])
+            x_val_classes = (class_key for class_key in list(data_image_paths.keys())[x_train_id:x_val_id])
+            x_test_classes = (class_key for class_key in list(data_image_paths.keys())[x_val_id:x_test_id])
             x_train, x_val, x_test = {class_key: data_image_paths[class_key] for class_key in x_train_classes}, \
                                      {class_key: data_image_paths[class_key] for class_key in x_val_classes}, \
                                      {class_key: data_image_paths[class_key] for class_key in x_test_classes},
