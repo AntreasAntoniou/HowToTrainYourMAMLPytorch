@@ -2,6 +2,7 @@ import json
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from random import shuffle
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -86,32 +87,30 @@ class DatasetTransformsConfig:
 def remap_to_few_shot_classes(
     support_set_labels: torch.Tensor, target_set_labels: torch.Tensor
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    # Concatenate support and target set labels and convert them to a list of integers
-    all_labels = torch.cat([support_set_labels, target_set_labels]).tolist()
+    # Find the unique labels in the combined set and, implicitly, the new mapping
+    support_set_shape = support_set_labels.shape
+    target_set_shape = target_set_labels.shape
 
-    # Creating a dictionary that maps each original label to a new label
-    original_labels_to_new = {
-        original_label: new_label
-        for new_label, original_label in enumerate(sorted(set(all_labels)))
-    }
-
-    # Remap the labels
-    support_set_labels = torch.tensor(
-        [
-            original_labels_to_new[int(label)]
-            for label in support_set_labels.tolist()
-        ],
-        dtype=torch.long,
-    )
-    target_set_labels = torch.tensor(
-        [
-            original_labels_to_new[int(label)]
-            for label in target_set_labels.tolist()
-        ],
-        dtype=torch.long,
+    unique_labels, inverse_indices = torch.unique(
+        torch.cat([support_set_labels.view(-1), target_set_labels.view(-1)]),
+        sorted=True,
+        return_inverse=True,
     )
 
-    return support_set_labels, target_set_labels
+    # Map labels to their new values in a vectorized manner
+    inverse_indices = inverse_indices.to(
+        support_set_labels.dtype
+    )  # Ensure same dtype as input labels
+
+    remapped_support_set_labels = inverse_indices[
+        : support_set_labels.view(-1).size(0)
+    ].view(support_set_shape)
+
+    remapped_target_set_labels = inverse_indices[
+        support_set_labels.view(-1).size(0) :
+    ].view(target_set_shape)
+
+    return remapped_support_set_labels, remapped_target_set_labels
 
 
 class TransformScheduler:
@@ -231,7 +230,7 @@ class FewShotLearningDatasetParallel(Dataset):
         for idx, sample in tqdm(enumerate(self.hf_dataset)):
             label = sample["label"]
             if label not in dataset_label_to_idx:
-                dataset_label_to_idx[label] = []
+                dataset_label_to_idx[label] = [idx]
             dataset_label_to_idx[label].append(idx)
 
         return dataset_label_to_idx
@@ -258,11 +257,12 @@ class FewShotLearningDatasetParallel(Dataset):
         for class_id, class_name in enumerate(classes):
             # Select image indices for support and target set
             image_indices = rng.choice(
-                len(self.dataset_label_to_idx_dict[class_name]),
+                self.dataset_label_to_idx_dict[class_name],
                 size=self.few_shot_task_config.num_samples_per_class
                 + self.few_shot_task_config.num_target_samples,
                 replace=False,
             )
+            shuffle(image_indices)
             support_indices = image_indices[
                 : self.few_shot_task_config.num_samples_per_class
             ]
@@ -293,13 +293,6 @@ class FewShotLearningDatasetParallel(Dataset):
             support_set_class_labels = torch.tensor(support_set_class_labels)
             target_set_class_labels = torch.tensor(target_set_class_labels)
 
-            (
-                support_set_class_labels,
-                target_set_class_labels,
-            ) = remap_to_few_shot_classes(
-                support_set_class_labels, target_set_class_labels
-            )
-
             support_set_images.append(torch.stack(support_set_class_images))
             support_set_labels.append(support_set_class_labels)
             target_set_images.append(torch.stack(target_set_class_images))
@@ -312,6 +305,11 @@ class FewShotLearningDatasetParallel(Dataset):
 
         target_set_images = torch.stack(target_set_images)
         target_set_labels = torch.stack(target_set_labels)
+
+        (
+            support_set_labels,
+            target_set_labels,
+        ) = remap_to_few_shot_classes(support_set_labels, target_set_labels)
 
         return (
             support_set_images,

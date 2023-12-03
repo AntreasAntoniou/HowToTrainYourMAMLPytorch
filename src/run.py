@@ -23,6 +23,7 @@ dataloader_dict = get_dataloader_dict(
     num_classes_per_set=args.num_classes_per_set,
     num_samples_per_class=args.num_samples_per_class,
     num_target_samples=args.num_target_samples,
+    data_cache_dir="datasets",
 )
 maml_system = ExperimentBuilder(
     model=model, dataloader_dict=dataloader_dict, args=args, device=device

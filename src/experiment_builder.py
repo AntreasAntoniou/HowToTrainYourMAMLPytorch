@@ -125,8 +125,9 @@ class ExperimentBuilder(object):
             list(summary_losses.keys()), list(summary_losses.values())
         ):
             if "loss" in key or "accuracy" in key:
-                value = float(value)
-                output_update += "{}: {:.4f}, ".format(key, value)
+                if "importance" not in key:
+                    value = float(value)
+                    output_update += "{}: {:.4f}, ".format(key, value)
 
         return output_update
 
