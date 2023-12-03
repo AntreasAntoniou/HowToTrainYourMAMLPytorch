@@ -116,7 +116,7 @@ If we pass weights to it, then the layer/model will use those to do inference, o
 parameters. Doing so allows a model like MAML to be build very easily. At the first step, use weights=None and for any
 subsequent step just pass the new inner loop/dynamic weights to the network.
 
-- train_maml_system.py: A very minimal script that combines the data provider with a meta learning system and sends them
+- src/run.py: A very minimal script that combines the data provider with a meta learning system and sends them
  to the experiment builder to run an experiment. Also takes care of automated extraction of data if they are not 
  available in a folder structure.
 
@@ -157,8 +157,8 @@ what to fill those with.
       "gpu_to_use":0,
       "num_dataprovider_workers":8,
       "max_models_to_save":5,
-      "dataset_name":"omniglot_dataset",
-      "dataset_path":"omniglot_dataset",
+      "dataset_name":"omniglot",
+      "dataset_path":"omniglot",
       "reset_stored_paths":false,
       "experiment_name":"MAML++_Omniglot_$num_classes$_way_$samples_per_class$_shot_$train_update_steps$_filter_multi_step_loss_with_max_pooling_seed_$train_seed$",
       "train_seed": $train_seed$, "val_seed": $val_seed$,
