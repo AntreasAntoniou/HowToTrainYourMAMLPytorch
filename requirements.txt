@@ -1,0 +1,11 @@
+torch
+torchvision
+torchaudio
+torchgeometry
+torchmetrics
+accelerate
+datasets
+transformers
+torchtyping
+rich
+einops

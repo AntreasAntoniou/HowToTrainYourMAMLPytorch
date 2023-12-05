@@ -1,4 +1,5 @@
 import json
+import multiprocessing as mp
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -204,10 +205,15 @@ class FewShotLearningDatasetParallel(Dataset):
         self.few_shot_task_config = few_shot_task_config
         if data_dir is None:
             # set to tmpdir if not specified
-            self.data_dir = Path(tempfile.gettempdir())
+            data_dir = Path(tempfile.gettempdir())
 
-        if isinstance(self.data_dir, str):
-            self.data_dir = Path(self.data_dir)
+        if isinstance(data_dir, str):
+            data_dir = Path(data_dir)
+
+        self.data_dir = data_dir
+
+        if not self.data_dir.exists():
+            self.data_dir.mkdir(parents=True)
 
         dataset_label_to_idx_json_path = (
             self.data_dir / "dataset_label_to_idx_dict.json"
@@ -301,7 +307,6 @@ class FewShotLearningDatasetParallel(Dataset):
         # Stack images and labels to construct task set tensors
         support_set_images = torch.stack(support_set_images)
         support_set_labels = torch.stack(support_set_labels)
-        # remap the labels to be in [0, num_classes_per_set]
 
         target_set_images = torch.stack(target_set_images)
         target_set_labels = torch.stack(target_set_labels)
@@ -350,12 +355,20 @@ def get_dataloader_dict(
     # Load dataset
     import datasets
 
+    if data_cache_dir is None:
+        # set to tmpdir if not specified
+        data_cache_dir = Path(tempfile.gettempdir())
+
+    if isinstance(data_cache_dir, str):
+        data_cache_dir = Path(data_cache_dir)
+
     if dataset_name == "omniglot":
         hf_dataset = datasets.load_dataset(
             f"GATE-engine/{dataset_name}",
             split="full",
             keep_in_memory=keep_in_memory,
             cache_dir=data_cache_dir,
+            num_proc=mp.cpu_count(),
         )
 
         # Define the splits for Omniglot according to the specified indices
@@ -382,6 +395,7 @@ def get_dataloader_dict(
             f"GATE-engine/{dataset_name}",
             keep_in_memory=keep_in_memory,
             cache_dir=data_cache_dir,
+            num_proc=mp.cpu_count(),
         )
         datasets_dict = {
             split: (
@@ -390,6 +404,7 @@ def get_dataloader_dict(
             )
             for split in ["train", "validation", "test"]
         }
+        datasets_dict["val"] = datasets_dict["validation"]
 
     # Set the image size based on the dataset
     image_size = (28, 28) if dataset_name == "omniglot" else (84, 84)
@@ -407,7 +422,7 @@ def get_dataloader_dict(
     )
 
     # Helper function to create dataset object for each split with Omniglot specific logic
-    def create_dataset(dataset, num_episodes):
+    def create_dataset(dataset, num_episodes, split):
         return FewShotLearningDatasetParallel(
             dataset,
             num_episodes=num_episodes,
@@ -418,11 +433,12 @@ def get_dataloader_dict(
             few_shot_task_config=few_shot_config,
             seed=seed,
             use_train_transforms=(dataset is datasets_dict["train"]),
+            data_dir=data_cache_dir / dataset_name / split,
         )
 
     # Create Dataset objects for each split
     datasets_objects = {
-        split: create_dataset(dataset, num_episodes)
+        split: create_dataset(dataset, num_episodes, split)
         for split, (dataset, num_episodes) in datasets_dict.items()
     }
 

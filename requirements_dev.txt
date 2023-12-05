@@ -1,0 +1,14 @@
+-r requirements.txt
+pytest
+isort
+jupyterlab
+black
+sphinx
+sphinx_rtd_theme
+sphinx-autodoc-typehints
+sphinx-material
+matplotlib
+pytest-rich
+pytest-sugar
+pytest-xdist
+
