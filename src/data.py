@@ -237,6 +237,7 @@ class FewShotLearningDatasetParallel(Dataset):
             label = sample["label"]
             if label not in dataset_label_to_idx:
                 dataset_label_to_idx[label] = [idx]
+                continue
             dataset_label_to_idx[label].append(idx)
 
         return dataset_label_to_idx
@@ -432,7 +433,7 @@ def get_dataloader_dict(
             ),
             few_shot_task_config=few_shot_config,
             seed=seed,
-            use_train_transforms=(dataset is datasets_dict["train"]),
+            use_train_transforms=(split == "train"),
             data_dir=data_cache_dir / dataset_name / split,
         )
 

@@ -1,5 +1,5 @@
 import numbers
-from copy import copy
+from copy import deepcopy
 
 import numpy as np
 import torch
@@ -293,8 +293,8 @@ class MetaBatchNormLayer(nn.Module):
             running_var = None
 
         if backup_running_statistics and self.use_per_step_bn_statistics:
-            self.backup_running_mean.data = copy(self.running_mean.data)
-            self.backup_running_var.data = copy(self.running_var.data)
+            self.backup_running_mean.data = deepcopy(self.running_mean.data)
+            self.backup_running_var.data = deepcopy(self.running_var.data)
 
         momentum = self.momentum
 
@@ -304,7 +304,7 @@ class MetaBatchNormLayer(nn.Module):
             running_var,
             weight,
             bias,
-            training=True,
+            training=training,
             momentum=momentum,
             eps=self.eps,
         )

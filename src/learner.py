@@ -286,16 +286,18 @@ class MAMLFewShotClassifier(nn.Module):
                     y=y_support_set_task,
                     weights=names_weights_copy,
                     backup_running_statistics=num_step == 0,
-                    training=True,
+                    training=training_phase,
                     num_step=num_step,
                 )
 
-                names_weights_copy = self.apply_inner_loop_update(
-                    loss=support_loss,
-                    names_weights_copy=names_weights_copy,
-                    use_second_order=use_second_order,
-                    current_step_idx=num_step,
-                )
+                if training_phase:
+                    # update inner loop parameters, iif we are training
+                    names_weights_copy = self.apply_inner_loop_update(
+                        loss=support_loss,
+                        names_weights_copy=names_weights_copy,
+                        use_second_order=use_second_order,
+                        current_step_idx=num_step,
+                    )
 
                 if (
                     use_multi_step_loss_optimization
@@ -307,7 +309,7 @@ class MAMLFewShotClassifier(nn.Module):
                         y=y_target_set_task,
                         weights=names_weights_copy,
                         backup_running_statistics=False,
-                        training=True,
+                        training=training_phase,
                         num_step=num_step,
                     )
 
@@ -323,7 +325,7 @@ class MAMLFewShotClassifier(nn.Module):
                         y=y_target_set_task,
                         weights=names_weights_copy,
                         backup_running_statistics=False,
-                        training=True,
+                        training=training_phase,
                         num_step=num_step,
                     )
                     task_losses.append(target_loss)
@@ -453,7 +455,6 @@ class MAMLFewShotClassifier(nn.Module):
         :return: The losses of the ran iteration.
         """
         epoch = int(epoch)
-        self.scheduler.step(epoch=epoch)
         if self.current_epoch != epoch:
             self.current_epoch = epoch
 
@@ -480,7 +481,8 @@ class MAMLFewShotClassifier(nn.Module):
         )
 
         self.meta_update(loss=losses["loss"])
-        losses["learning_rate"] = self.scheduler.get_lr()[0]
+        self.scheduler.step(epoch=epoch)
+        losses["learning_rate"] = self.scheduler.get_last_lr()[0]
         self.optimizer.zero_grad()
         self.zero_grad()
 
@@ -497,24 +499,25 @@ class MAMLFewShotClassifier(nn.Module):
         if self.training:
             self.eval()
 
-        x_support_set, x_target_set, y_support_set, y_target_set = data_batch
+        with torch.no_grad():
+            x_support_set, x_target_set, y_support_set, y_target_set = data_batch
 
-        x_support_set = (
-            torch.Tensor(x_support_set).float().to(device=self.device)
-        )
-        x_target_set = (
-            torch.Tensor(x_target_set).float().to(device=self.device)
-        )
-        y_support_set = (
-            torch.Tensor(y_support_set).long().to(device=self.device)
-        )
-        y_target_set = torch.Tensor(y_target_set).long().to(device=self.device)
+            x_support_set = (
+                torch.Tensor(x_support_set).float().to(device=self.device)
+            )
+            x_target_set = (
+                torch.Tensor(x_target_set).float().to(device=self.device)
+            )
+            y_support_set = (
+                torch.Tensor(y_support_set).long().to(device=self.device)
+            )
+            y_target_set = torch.Tensor(y_target_set).long().to(device=self.device)
 
-        data_batch = (x_support_set, x_target_set, y_support_set, y_target_set)
+            data_batch = (x_support_set, x_target_set, y_support_set, y_target_set)
 
-        losses, per_task_target_preds = self.evaluation_forward_prop(
-            data_batch=data_batch, epoch=self.current_epoch
-        )
+            losses, per_task_target_preds = self.evaluation_forward_prop(
+                data_batch=data_batch, epoch=self.current_epoch
+            )
 
         # losses['loss'].backward() # uncomment if you get the weird memory error
         # self.zero_grad()
